@@ -1,0 +1,112 @@
+# =========================
+
+# PYTHON
+
+# =========================
+
+**pycache**/
+*.pyc
+*.pyo
+*.pyd
+*.pyc.*
+*.py,cover
+.python-version
+
+# =========================
+
+# VIRTUAL ENVIRONMENTS
+
+# =========================
+
+.venv/
+venv/
+env/
+ENV/
+
+# =========================
+
+# ENVIRONMENT VARIABLES
+
+# =========================
+
+.env
+.env.*
+!.env.example
+
+# =========================
+
+# VECTOR DATABASE / RAG DATA
+
+# =========================
+
+data_base/
+chroma/
+faiss_index/
+*.faiss
+*.pkl
+
+# =========================
+
+# JUPYTER
+
+# =========================
+
+.ipynb_checkpoints
+
+# =========================
+
+# IDE / EDITORS
+
+# =========================
+
+.vscode/
+.idea/
+
+# =========================
+
+# LOGS
+
+# =========================
+
+*.log
+logs/
+
+# =========================
+
+# OS FILES
+
+# =========================
+
+.DS_Store
+Thumbs.db
+
+# =========================
+
+# BUILD / CACHE
+
+# =========================
+
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# =========================
+
+# TEST CACHE
+
+# =========================
+
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# =========================
+
+# FASTAPI / UVICORN
+
+# =========================
+
+*.pid
+*.sock
