@@ -1,0 +1,40 @@
+## =============================================================
+## DocuVector Lite — Allowlist do pip-audit
+##
+## Cada entrada DEVE ter justificativa rastreável.
+## Padrão de auditoria: revisar a cada sprint.
+## =============================================================
+
+## ---------------------------------------------------------------
+## MAL-2026-4750 — fastapi 0.136.3
+##
+## Status: SOB INVESTIGAÇÃO
+## Data do flag: 26/05/2026
+## Reportado por: pip-audit local (ambiente do autor)
+##
+## Análise:
+##   - Advisory não encontrado em OSV.dev, GHSA, NVD nem em mirrors
+##     de malicious-packages (kam193, ossf, amazon-inspector).
+##   - Possível falso positivo de classificador automático.
+##   - FastAPI 0.136.3 é a versão estável recomendada pelo upstream
+##     no momento desta decisão.
+##
+## Mitigações compensatórias aplicadas:
+##   1. Aplicação executa apenas em localhost durante demonstração
+##      acadêmica (sem exposição pública).
+##   2. Dependência isolada em [project.optional-dependencies] api
+##      para limitar superfície de importação.
+##   3. SAST (bandit) e tipagem estrita (mypy) ativos em todo o
+##      código que importa FastAPI.
+##   4. SBOM CycloneDX gerada no CI permite rastrear caso surja
+##      advisory público com IoCs.
+##
+## Plano de revisão:
+##   - Reavaliar este ignore na Sprint 8 (antes da apresentação).
+##   - Se advisory público surgir com detalhe técnico, agir conforme
+##     SECURITY_THREAT_MODEL.md seção 13.
+##
+## Aprovado por: Davi Rosa F.
+## ---------------------------------------------------------------
+[ignore-vuln]
+MAL-2026-4750 = "FastAPI 0.136.3: advisory sem detalhe público; risco residual aceito; mitigações compensatórias documentadas no threat model."

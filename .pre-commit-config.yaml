@@ -1,0 +1,82 @@
+## =============================================================
+## DocuVector Lite — Hooks de pré-commit
+## Instalar: uv run pre-commit install
+## Rodar em tudo: uv run pre-commit run --all-files
+## =============================================================
+
+default_language_version:
+  # Windows-safe: evita erro "failed to find interpreter ... python3.11".
+  # O pre-commit usará o Python disponível no ambiente atual.
+  python: python
+
+default_stages: [pre-commit]
+
+fail_fast: false
+
+repos:
+  ## Higiene básica de arquivos
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-ast
+      - id: check-yaml
+        args: ["--unsafe"] # permitir tags do docker-compose
+      - id: check-toml
+      - id: check-json
+      - id: check-added-large-files
+        args: ["--maxkb=2048"]
+      - id: check-case-conflict
+      - id: check-merge-conflict
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: mixed-line-ending
+        args: ["--fix=lf"]
+      - id: detect-private-key
+
+  ## Lint + format
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.14.14
+    hooks:
+      - id: ruff
+        args: ["check", "./src", "./tests", "--fix", "--exit-non-zero-on-fix"]
+        pass_filenames: false
+      - id: ruff-format
+        args: ["./src", "./tests"]
+        pass_filenames: false
+
+  ## Tipagem estática estrita
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.18.2
+    hooks:
+      - id: mypy
+        args: ["--config-file=pyproject.toml", "./src", "./tests"]
+        pass_filenames: false
+        additional_dependencies:
+          - "pydantic>=2.7,<3.0"
+          - "pydantic-settings>=2.4,<3.0"
+          - "sqlalchemy>=2.0,<3.0"
+          - "fastapi==0.136.1"
+          - "structlog>=24.4,<25.0"
+          - "types-passlib>=1.7"
+          - "types-python-jose>=3.3"
+
+  ## SAST
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.8.6
+    hooks:
+      - id: bandit
+        args: ["-c", "pyproject.toml", "-r", "./src"]
+        pass_filenames: false
+
+  ## Detecção de segredos comitados acidentalmente
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        args: ["--baseline", ".secrets.baseline"]
+        exclude: |
+          (?x)^(
+            \.env\.example|
+            tests/fixtures/.*|
+            docs/.*\.md
+          )$
