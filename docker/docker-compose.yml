@@ -1,0 +1,78 @@
+## =============================================================
+## DocuVector Lite — Stack local de desenvolvimento
+## Sobe: PostgreSQL 16 com healthcheck.
+## Comando: docker compose -f docker/docker-compose.yml up -d
+## Derrubar: docker compose -f docker/docker-compose.yml down
+## Limpar volume: docker compose -f docker/docker-compose.yml down -v
+## =============================================================
+
+name: docuvector-lite
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: docuvector-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-docuvector}
+      POSTGRES_USER: ${POSTGRES_USER:-docuvector_app}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina_POSTGRES_PASSWORD_no_env}
+      ## Hardening: força SCRAM em vez de md5
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256 --auth-local=scram-sha-256"
+      POSTGRES_HOST_AUTH_METHOD: scram-sha-256
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      ## Mantém 5432 só para acesso local; em produção real ficaria fechado
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/01_init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    networks:
+      - docuvector_net
+    ## Hardening mínimo
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+      - DAC_OVERRIDE
+      - FOWNER
+
+  ## Container utilitário para rodar Alembic migrations sob demanda.
+  ## Não roda por default. Uso: docker compose run --rm migrations
+  migrations:
+    image: python:3.11-slim
+    container_name: docuvector-migrations
+    profiles: ["tools"]
+    working_dir: /app
+    volumes:
+      - ../:/app:ro
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-docuvector_app}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-docuvector}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: >
+      sh -c "pip install --no-cache-dir alembic 'psycopg[binary]' sqlalchemy &&
+             alembic upgrade head"
+    networks:
+      - docuvector_net
+
+volumes:
+  postgres_data:
+    name: docuvector_postgres_data
+    driver: local
+
+networks:
+  docuvector_net:
+    name: docuvector_net
+    driver: bridge
