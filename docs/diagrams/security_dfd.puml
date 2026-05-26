@@ -1,0 +1,99 @@
+@startuml security_dfd
+
+' =============================================================
+' DocuVector Lite — Data Flow Diagram (Threat Modeling)
+' Origem: docs/SECURITY_THREAT_MODEL.md
+' Notação: STRIDE / OWASP. Trust boundaries em vermelho.
+' Para renderizar:
+'   plantuml docs/diagrams/security_dfd.puml
+' =============================================================
+
+title DocuVector Lite — DFD com Trust Boundaries
+
+skinparam shadowing false
+skinparam DefaultFontName "Segoe UI"
+skinparam ComponentBackgroundColor #FAFAFA
+skinparam ComponentBorderColor #333
+skinparam DatabaseBackgroundColor #FFF8E1
+skinparam DatabaseBorderColor #555
+skinparam ActorBorderColor #333
+skinparam PackageBackgroundColor #FFFFFF
+skinparam PackageBorderColor #B00020
+skinparam PackageBorderThickness 2
+skinparam PackageFontColor #B00020
+skinparam PackageFontStyle bold
+
+actor "Usuário\nlegítimo" as LegitUser
+actor "Atacante\nexterno" as Attacker #FFCDD2
+actor "Administrador" as Admin
+
+package "TRUST BOUNDARY 1: Internet pública" as TB1 {
+  cloud "Browser do cliente\n(JS/HTMX)" as Browser
+}
+
+package "TRUST BOUNDARY 2: Aplicação (host local)" as TB2 {
+  component "API REST FastAPI\n(routers + middleware)" as API
+  component "Use Cases\n(application layer)" as UseCases
+  component "Auth\n(JWT + bcrypt)" as Auth
+  component "Audit logger\n(structlog)" as Audit
+  component "Filesystem\n(uploads temp)" as FS
+}
+
+package "TRUST BOUNDARY 3: Data plane (host local)" as TB3 {
+  database "PostgreSQL\n(users, docs,\naudit_logs)" as Postgres
+  database "ChromaDB\n(vetores)" as Chroma
+}
+
+package "TRUST BOUNDARY 4: Provedores externos (rede)" as TB4 {
+  cloud "OpenAI API\n(embeddings + LLM)" as OpenAI
+}
+
+package "Provedor local" as Local {
+  component "Sentence Transformers\n(E5 in-process)" as E5
+}
+
+' Fluxos legítimos
+LegitUser --> Browser : credenciais\n+ pergunta
+Admin --> Browser : credenciais
+Browser --> API : HTTPS\nJWT + payload
+API --> Auth : validar token
+Auth --> Postgres : SELECT users
+API --> UseCases : invoca caso de uso
+UseCases --> Postgres : CRUD documents
+UseCases --> Chroma : upsert/search vetores
+UseCases --> FS : grava upload temporário
+UseCases --> E5 : embed local (sem rede)
+UseCases ..> OpenAI : embed remoto\n(API key)
+UseCases ..> OpenAI : chat LLM\n(prompt + chunks)
+UseCases --> Audit : evento
+Audit --> Postgres : INSERT audit_logs
+
+' Fluxos de ameaça
+Attacker -[#B00020,dashed]-> Browser : XSS, CSRF\nphishing de credencial
+Attacker -[#B00020,dashed]-> API : brute force,\nBOLA, mass assignment,\nDoS por upload
+Attacker -[#B00020,dashed]-> OpenAI : prompt injection\nvia conteúdo de doc
+Attacker -[#B00020,dashed]-> FS : path traversal,\nzip bomb
+
+note top of TB1
+  Não confiamos no
+  navegador. Toda entrada
+  passa por validação
+  Pydantic na API.
+end note
+
+note top of TB2
+  Aplicação confia em si
+  mesma, mas valida tudo
+  que cruza fronteira.
+end note
+
+note bottom of TB4
+  Provedor externo recebe
+  trechos do documento.
+  Decisão arquitetural:
+  oferecer alternativa
+  local (E5) para casos
+  sensíveis.
+end note
+
+@enduml

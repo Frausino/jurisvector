@@ -1,0 +1,92 @@
+@startuml sequence_ingestion
+
+' =============================================================
+' DocuVector Lite — Sequência: Ingestão de documento
+' UC-04: Enviar documento
+' Origem: docs/SRS.md v1.0 (RF-020 a RF-047)
+' Para renderizar:
+'   plantuml docs/diagrams/sequence_ingestion.puml
+' =============================================================
+
+title DocuVector Lite — Sequência de ingestão (UC-04)
+
+skinparam shadowing false
+skinparam DefaultFontName "Segoe UI"
+skinparam SequenceArrowColor #333
+skinparam SequenceLifeLineBorderColor #555
+skinparam SequenceLifeLineBackgroundColor #FAFAFA
+skinparam SequenceParticipantBorderColor #333
+skinparam ParticipantBackgroundColor #EEF6FF
+skinparam ActorBackgroundColor #FFF6E6
+autonumber
+
+actor "Usuário" as User
+participant "Front\n(Jinja2 + HTMX)" as Front
+participant "DocumentsRouter\n(api)" as Router
+participant "AuthMiddleware" as Auth
+participant "IngestionUseCase\n(application)" as UC
+participant "PyPdfExtractor\n(infrastructure)" as Extractor
+participant "RecursiveSplitter\n(infrastructure)" as Splitter
+participant "EmbeddingProvider\n(OpenAI ou E5 local)" as Embedder
+participant "Compressor\n(opcional)" as Compressor
+participant "ChromaVectorStore\n(infrastructure)" as Vector
+participant "DocumentRepository\n(SQLAlchemy)" as DocRepo
+participant "AuditRepository" as Audit
+
+User -> Front : seleciona PDF + provider + método
+Front -> Router : POST /api/v1/documents\n(multipart, JWT)
+Router -> Auth : validar token
+Auth --> Router : user autenticado
+
+Router -> Router : validar tamanho <= 10MB (RGN-04)
+Router -> Router : validar formato (RGN-06)
+Router -> UC : execute(user, file, provider, method)
+
+UC -> DocRepo : save(Document{status=pending})
+DocRepo --> UC : document_id
+
+UC -> Extractor : extract(file_path)
+alt PDF sem texto extraível (RGN-05)
+  Extractor --> UC : raise EmptyTextError
+  UC -> DocRepo : update(status=failed)
+  UC -> Audit : append(action=document_upload, status=failure)
+  UC --> Router : raise UnprocessableEntityError
+  Router --> Front : HTTP 422 + mensagem PT-BR
+  Front --> User : exibe erro
+else PDF válido
+  Extractor --> UC : texto_completo
+
+  UC -> Splitter : split(texto, size=1000, overlap=200)
+  Splitter --> UC : chunks[]
+
+  group Embedding (cronometrado)
+    UC -> Embedder : embed_passages(chunks)
+    note right of Embedder
+      E5 local: aplica prefixo
+      "passage: " automaticamente.
+      OpenAI: sem prefixo.
+    end note
+    Embedder --> UC : vetores_originais (n_chunks x dim)
+  end
+
+  opt método != none
+    group Compressão (cronometrada)
+      UC -> Compressor : fit(vetores_originais)
+      UC -> Compressor : transform(vetores_originais)
+      Compressor --> UC : vetores_comprimidos
+      UC -> UC : calcular ratio, retention,\nRAM, tempos
+    end
+  end
+
+  UC -> Vector : upsert(chunks, vetores_finais,\nmetadata={owner_id, doc_id,\nprovider, method})
+  Vector --> UC : ok
+
+  UC -> DocRepo : update(status=indexed,\nchunks_count, dimensions,\nretention, ingest_time_ms)
+  UC -> Audit : append(action=document_uploaded,\nstatus=success, resource_id=doc_id)
+
+  UC --> Router : Document
+  Router --> Front : HTTP 201 + payload
+  Front --> User : exibe documento "indexed"
+end
+
+@enduml
