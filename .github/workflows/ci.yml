@@ -1,0 +1,104 @@
+name: CI
+
+on:
+  push:
+    branches: ["main", "dev"]
+  pull_request:
+    branches: ["main", "dev"]
+
+## Cancela runs antigos do mesmo PR/branch para economizar minutos.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+## Permissões mínimas (princípio de menor privilégio).
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: "3.11"
+  UV_VERSION: "0.4.27"
+
+jobs:
+  quality-gates:
+    name: Quality & Security Gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout do repositório
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Instalar uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+          cache-dependency-glob: |
+            **/pyproject.toml
+            **/uv.lock
+
+      - name: Configurar Python ${{ env.PYTHON_VERSION }}
+        run: uv python install ${{ env.PYTHON_VERSION }}
+
+      - name: Sincronizar dependências (dev)
+        run: uv sync --extra dev --frozen
+
+      ## ========== Qualidade ==========
+
+      - name: Lint (ruff check)
+        run: uv run ruff check src tests
+
+      - name: Formatação (ruff format --check)
+        run: uv run ruff format --check src tests
+
+      - name: Tipagem estática (mypy strict)
+        run: uv run mypy src tests
+
+      ## ========== Segurança ==========
+
+      - name: SAST (Bandit)
+        run: uv run bandit -c pyproject.toml -r src -f json -o bandit-report.json
+        continue-on-error: false
+
+      - name: SCA (pip-audit)
+        run: uv run pip-audit --format json --output pip-audit-report.json
+        continue-on-error: false
+
+      - name: Detecção de segredos (detect-secrets)
+        run: uv run detect-secrets scan --baseline .secrets.baseline
+
+      - name: SBOM CycloneDX
+        run: uv run cyclonedx-py environment -o sbom.json
+
+      ## ========== Testes ==========
+
+      ## Smoke test mínimo. A partir da Sprint 6 esta etapa
+      ## passa a usar "uv run pytest" com gate de cobertura 70%.
+      - name: Smoke test (health endpoint)
+        run: uv run pytest tests/integration/test_health.py --no-cov -q
+
+      ## ========== Artefatos ==========
+
+      - name: Publicar artefatos de segurança e qualidade
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-and-quality-artifacts
+          path: |
+            sbom.json
+            bandit-report.json
+            pip-audit-report.json
+          retention-days: 30
+          if-no-files-found: warn
+
+      - name: Resumo no GitHub Step Summary
+        if: always()
+        run: |
+          echo "## CI Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- Python: ${{ env.PYTHON_VERSION }}" >> $GITHUB_STEP_SUMMARY
+          echo "- uv: ${{ env.UV_VERSION }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Commit: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Branch: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
