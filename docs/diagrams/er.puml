@@ -1,0 +1,174 @@
+@startuml er_docuvector_lite
+
+' =============================================================
+' DocuVector Lite — Diagrama Entidade-Relacionamento
+' Origem: docs/SRS.md v1.0
+' Notação: Crow's Foot (Information Engineering)
+' Para renderizar:
+'   plantuml docs/diagrams/er.puml
+' =============================================================
+
+title DocuVector Lite — ER lógico do banco relacional (v1.0)
+
+skinparam shadowing false
+skinparam linetype ortho
+skinparam DefaultFontName "Segoe UI"
+hide circle
+
+' =============================================================
+' ENTIDADES
+' =============================================================
+
+entity "users" as users {
+  * id : UUID <<PK>>
+  --
+  * email : CITEXT <<UQ>>
+  * password_hash : TEXT
+  * role : ENUM(admin, user)
+  * is_active : BOOLEAN
+  * created_at : TIMESTAMPTZ
+  * updated_at : TIMESTAMPTZ
+}
+
+entity "documents" as documents {
+  * id : UUID <<PK>>
+  --
+  * owner_id : UUID <<FK users.id>>
+  * filename : TEXT
+  * file_format : ENUM(pdf, txt, md)
+  * size_bytes : BIGINT
+  * status : ENUM(pending, indexed, failed)
+  * chunks_count : INTEGER
+  * embedding_provider : ENUM(openai, sentence_transformers)
+  * embedding_model : TEXT
+  * compression_method : ENUM(none, pca, random_projection, int8, binary)
+    original_dimension : INTEGER
+    compressed_dimension : INTEGER
+    semantic_retention : NUMERIC(5,4)
+    ingest_time_ms : INTEGER
+  * created_at : TIMESTAMPTZ
+  * updated_at : TIMESTAMPTZ
+}
+
+entity "queries" as queries {
+  * id : UUID <<PK>>
+  --
+  * user_id : UUID <<FK users.id>>
+    document_id : UUID <<FK documents.id>>
+  * question : TEXT
+    answer : TEXT
+  * embedding_provider : ENUM(openai, sentence_transformers)
+  * llm_model : TEXT
+  * retrieval_time_ms : INTEGER
+  * llm_time_ms : INTEGER
+    sources : JSONB
+    top_score : NUMERIC(5,4)
+  * created_at : TIMESTAMPTZ
+}
+
+entity "compression_benchmarks" as benchmarks {
+  * id : UUID <<PK>>
+  --
+  * document_id : UUID <<FK documents.id>>
+  * method : ENUM(pca, random_projection, int8, binary)
+  * original_dim : INTEGER
+  * compressed_dim : INTEGER
+  * compression_ratio_bytes : NUMERIC(8,4)
+  * semantic_retention : NUMERIC(5,4)
+  * build_time_ms : INTEGER
+  * transform_time_ms : INTEGER
+  * ram_bytes_original : BIGINT
+  * ram_bytes_compressed : BIGINT
+  * created_at : TIMESTAMPTZ
+}
+
+entity "audit_logs" as audit {
+  * id : UUID <<PK>>
+  --
+    user_id : UUID <<FK users.id>>
+  * action : VARCHAR(64)
+  * resource_type : VARCHAR(32)
+    resource_id : UUID
+  * status : ENUM(success, failure, forbidden)
+    ip_address : INET
+    user_agent : TEXT
+    metadata : JSONB
+  * created_at : TIMESTAMPTZ
+}
+
+' =============================================================
+' RELACIONAMENTOS
+' =============================================================
+
+users ||--o{ documents : "possui"
+users ||--o{ queries : "executa"
+users ||--o{ audit : "gera"
+documents ||--o{ queries : "é alvo de"
+documents ||--o{ benchmarks : "é avaliado em"
+
+' =============================================================
+' NOTAS
+' =============================================================
+
+note right of users
+  RGN-02: bcrypt cost 12.
+  RGN-12: login/logout
+  geram entrada em audit_logs.
+  Seed: 1 admin + 2 users
+  via scripts/seed_users.py.
+end note
+
+note bottom of documents
+  RGN-04: size_bytes <= 10 MB.
+  RGN-13: DELETE cascateia
+  remoção em ChromaDB
+  (controlado em código,
+  não em FK do banco).
+  Vetores propriamente ditos
+  ficam em ChromaDB,
+  não nesta tabela.
+end note
+
+note bottom of queries
+  Pode existir sem
+  document_id quando
+  query for global
+  (não usado no v1.0).
+end note
+
+note bottom of benchmarks
+  Cada documento gera
+  até 4 registros, um
+  por método.
+end note
+
+note bottom of audit
+  RGN-10: tentativa de
+  acesso indevido fica
+  com status=forbidden,
+  mesmo que o cliente
+  receba HTTP 404.
+end note
+
+' =============================================================
+' OBSERVAÇÕES FORA DO BANCO RELACIONAL
+' =============================================================
+
+note as N1
+  <b>ChromaDB (vector store)</b>
+  Não é tabela relacional.
+  Coleção única "documents"
+  com metadata por chunk:
+   - document_id
+   - chunk_index
+   - owner_id
+   - embedding_provider
+   - compression_method
+  Vetor armazenado é o vetor
+  pós-compressão quando o
+  documento foi indexado com
+  compressão; caso contrário,
+  o vetor original.
+end note
+
+@enduml

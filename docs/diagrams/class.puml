@@ -1,0 +1,367 @@
+@startuml class_docuvector_lite
+
+' =============================================================
+' DocuVector Lite — Diagrama de Classes (camadas Clean Architecture)
+' Origem: docs/SRS.md v1.0
+' Para renderizar:
+'   plantuml docs/diagrams/class.puml
+'
+' Convenção: linha tracejada (..|>) = implements/realizes.
+' Linha cheia com seta (--> ) = depends on (uses).
+' =============================================================
+
+title DocuVector Lite — Classes principais por camada
+
+skinparam shadowing false
+skinparam linetype polyline
+skinparam DefaultFontName "Segoe UI"
+skinparam ClassBackgroundColor #FAFAFA
+skinparam ClassBorderColor #333
+skinparam PackageBorderColor #555
+skinparam PackageBackgroundColor #FFF
+
+' =============================================================
+' CAMADA 1: DOMÍNIO
+' =============================================================
+
+package "domain.entities" #EEF6FF {
+  class User {
+    +id: UUID
+    +email: str
+    +password_hash: str
+    +role: UserRole
+    +is_active: bool
+  }
+
+  class Document {
+    +id: UUID
+    +owner_id: UUID
+    +filename: str
+    +file_format: FileFormat
+    +status: DocumentStatus
+    +embedding_provider: ProviderName
+    +compression_method: CompressionMethod
+    +original_dimension: int
+    +compressed_dimension: int
+    +semantic_retention: float
+  }
+
+  class Chunk {
+    +document_id: UUID
+    +index: int
+    +text: str
+    +embedding: ndarray
+  }
+
+  class QueryRecord {
+    +id: UUID
+    +user_id: UUID
+    +document_id: UUID
+    +question: str
+    +answer: str
+    +sources: list[ChunkReference]
+    +retrieval_time_ms: int
+    +llm_time_ms: int
+  }
+
+  class CompressionResult {
+    +method: CompressionMethod
+    +original_dim: int
+    +compressed_dim: int
+    +ratio_bytes: float
+    +semantic_retention: float
+    +build_time_ms: int
+    +ram_bytes_original: int
+    +ram_bytes_compressed: int
+  }
+}
+
+package "domain.interfaces" #EEF6FF {
+  interface UserRepository {
+    +find_by_email(email): User | None
+    +find_by_id(id): User | None
+    +save(user): User
+  }
+
+  interface DocumentRepository {
+    +find_by_id(id): Document | None
+    +find_by_owner(owner_id): list[Document]
+    +find_all(): list[Document]
+    +save(document): Document
+    +delete(id): None
+  }
+
+  interface AuditRepository {
+    +append(event): None
+    +list_paginated(offset, limit): list[AuditEvent]
+  }
+
+  interface VectorStore {
+    +upsert(chunks, vectors, metadata): None
+    +search(vector, top_k, filters): list[SearchHit]
+    +delete_by_document(document_id): None
+  }
+
+  interface EmbeddingProvider {
+    +name(): str
+    +dimension(): int
+    +embed_passages(texts): ndarray
+    +embed_query(text): ndarray
+    +cost_per_million_tokens(): float
+  }
+
+  interface Compressor {
+    +method(): CompressionMethod
+    +fit(embeddings): None
+    +transform(embeddings): ndarray
+    +metadata(): dict
+  }
+
+  interface DocumentExtractor {
+    +supports(file_format): bool
+    +extract(file_path): str
+  }
+
+  interface TextSplitter {
+    +split(text, chunk_size, overlap): list[str]
+  }
+
+  interface PasswordHasher {
+    +hash(plain): str
+    +verify(plain, hashed): bool
+  }
+
+  interface TokenService {
+    +issue(user): str
+    +verify(token): TokenPayload
+  }
+}
+
+' =============================================================
+' CAMADA 2: APLICAÇÃO (Use Cases)
+' =============================================================
+
+package "application" #FFF6E6 {
+  class AuthUseCase {
+    -user_repo: UserRepository
+    -hasher: PasswordHasher
+    -tokens: TokenService
+    -audit: AuditRepository
+    +login(email, password, ip): TokenPayload
+    +me(token): User
+  }
+
+  class DocumentCrudUseCase {
+    -doc_repo: DocumentRepository
+    -vector_store: VectorStore
+    -audit: AuditRepository
+    +list_for(user): list[Document]
+    +get(user, document_id): Document
+    +update_metadata(user, doc_id, patch): Document
+    +delete(user, document_id): None
+  }
+
+  class IngestionUseCase {
+    -doc_repo: DocumentRepository
+    -extractor_factory: ExtractorFactory
+    -splitter: TextSplitter
+    -embedder: EmbeddingProvider
+    -compressor: Compressor | None
+    -vector_store: VectorStore
+    -audit: AuditRepository
+    +execute(user, file, provider, compression): Document
+  }
+
+  class RetrievalUseCase {
+    -embedder: EmbeddingProvider
+    -vector_store: VectorStore
+    +execute(query, document_id, top_k, threshold): list[ChunkReference]
+  }
+
+  class AnswerUseCase {
+    -retrieval: RetrievalUseCase
+    -llm_client: LLMClient
+    -audit: AuditRepository
+    +execute(user, question, document_id, provider): QueryRecord
+  }
+
+  class CompressionBenchmarkUseCase {
+    -doc_repo: DocumentRepository
+    -vector_store: VectorStore
+    -compressors: list[Compressor]
+    +execute(user, document_id): list[CompressionResult]
+  }
+
+  class EmbeddingBenchmarkUseCase {
+    -providers: dict[str, EmbeddingProvider]
+    -vector_store: VectorStore
+    +execute(question, document_id): EmbedderComparison
+  }
+
+  class MetricsUseCase {
+    -doc_repo: DocumentRepository
+    -audit: AuditRepository
+    +summary(): MetricsSummary
+  }
+}
+
+' =============================================================
+' CAMADA 3: INFRAESTRUTURA
+' =============================================================
+
+package "infrastructure.persistence" #F0F8E8 {
+  class SqlAlchemyUserRepository
+  class SqlAlchemyDocumentRepository
+  class SqlAlchemyAuditRepository
+}
+
+package "infrastructure.vector" #F0F8E8 {
+  class ChromaVectorStore
+}
+
+package "infrastructure.embeddings" #F0F8E8 {
+  class OpenAIEmbeddingProvider
+  class SentenceTransformersEmbeddingProvider {
+    -model_name = "intfloat/multilingual-e5-small"
+    -prefix_query = "query: "
+    -prefix_passage = "passage: "
+  }
+}
+
+package "infrastructure.compression" #F0F8E8 {
+  class PcaCompressor
+  class RandomProjectionCompressor
+  class Int8Compressor
+  class BinaryCompressor
+}
+
+package "infrastructure.extraction" #F0F8E8 {
+  class PyPdfExtractor
+  class TxtExtractor
+  class MdExtractor
+}
+
+package "infrastructure.splitting" #F0F8E8 {
+  class RecursiveSplitter
+}
+
+package "infrastructure.security" #F0F8E8 {
+  class BcryptPasswordHasher
+  class JwtTokenService
+}
+
+' =============================================================
+' CAMADA 4: APRESENTAÇÃO
+' =============================================================
+
+package "api.routers" #FBE9E7 {
+  class AuthRouter
+  class DocumentsRouter
+  class QueriesRouter
+  class BenchmarksRouter
+  class MetricsRouter
+}
+
+' =============================================================
+' RELACIONAMENTOS (implementação)
+' =============================================================
+
+SqlAlchemyUserRepository ..|> UserRepository
+SqlAlchemyDocumentRepository ..|> DocumentRepository
+SqlAlchemyAuditRepository ..|> AuditRepository
+ChromaVectorStore ..|> VectorStore
+OpenAIEmbeddingProvider ..|> EmbeddingProvider
+SentenceTransformersEmbeddingProvider ..|> EmbeddingProvider
+PcaCompressor ..|> Compressor
+RandomProjectionCompressor ..|> Compressor
+Int8Compressor ..|> Compressor
+BinaryCompressor ..|> Compressor
+PyPdfExtractor ..|> DocumentExtractor
+TxtExtractor ..|> DocumentExtractor
+MdExtractor ..|> DocumentExtractor
+RecursiveSplitter ..|> TextSplitter
+BcryptPasswordHasher ..|> PasswordHasher
+JwtTokenService ..|> TokenService
+
+' =============================================================
+' RELACIONAMENTOS (use cases dependem de interfaces de domínio)
+' =============================================================
+
+AuthUseCase --> UserRepository
+AuthUseCase --> PasswordHasher
+AuthUseCase --> TokenService
+AuthUseCase --> AuditRepository
+
+DocumentCrudUseCase --> DocumentRepository
+DocumentCrudUseCase --> VectorStore
+DocumentCrudUseCase --> AuditRepository
+
+IngestionUseCase --> DocumentRepository
+IngestionUseCase --> DocumentExtractor
+IngestionUseCase --> TextSplitter
+IngestionUseCase --> EmbeddingProvider
+IngestionUseCase --> Compressor
+IngestionUseCase --> VectorStore
+IngestionUseCase --> AuditRepository
+
+RetrievalUseCase --> EmbeddingProvider
+RetrievalUseCase --> VectorStore
+
+AnswerUseCase --> RetrievalUseCase
+AnswerUseCase --> AuditRepository
+
+CompressionBenchmarkUseCase --> DocumentRepository
+CompressionBenchmarkUseCase --> VectorStore
+CompressionBenchmarkUseCase --> Compressor
+
+EmbeddingBenchmarkUseCase --> EmbeddingProvider
+EmbeddingBenchmarkUseCase --> VectorStore
+
+' =============================================================
+' RELACIONAMENTOS (routers compõem use cases)
+' =============================================================
+
+AuthRouter --> AuthUseCase
+DocumentsRouter --> DocumentCrudUseCase
+DocumentsRouter --> IngestionUseCase
+DocumentsRouter --> CompressionBenchmarkUseCase
+QueriesRouter --> AnswerUseCase
+QueriesRouter --> EmbeddingBenchmarkUseCase
+BenchmarksRouter --> CompressionBenchmarkUseCase
+BenchmarksRouter --> EmbeddingBenchmarkUseCase
+MetricsRouter --> MetricsUseCase
+
+' =============================================================
+' NOTAS DE ARQUITETURA
+' =============================================================
+
+note top of "domain.entities"
+  Camada de Domínio.
+  Sem dependências externas:
+  não importa FastAPI, SQLAlchemy
+  ou ChromaDB.
+end note
+
+note top of "application"
+  Camada de Aplicação.
+  Orquestra o domínio através
+  das interfaces. Injeção de
+  dependência via construtor.
+end note
+
+note top of "infrastructure.persistence"
+  Camada de Infraestrutura.
+  Implementa as interfaces de
+  domínio. Aqui sim entram
+  SQLAlchemy, Chroma, OpenAI,
+  Sentence Transformers.
+end note
+
+note top of "api.routers"
+  Camada de Apresentação.
+  Traduz HTTP para chamadas
+  de use case. Nunca contém
+  regra de negócio.
+end note
+
+@enduml

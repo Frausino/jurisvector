@@ -1,0 +1,97 @@
+@startuml sequence_query
+
+' =============================================================
+' DocuVector Lite — Sequência: Pergunta ao documento
+' UC-10: Perguntar ao documento
+' Origem: docs/SRS.md v1.0 (RF-070 a RF-075)
+' Para renderizar:
+'   plantuml docs/diagrams/sequence_query.puml
+' =============================================================
+
+title DocuVector Lite — Sequência de query (UC-10)
+
+skinparam shadowing false
+skinparam DefaultFontName "Segoe UI"
+skinparam SequenceArrowColor #333
+skinparam SequenceLifeLineBorderColor #555
+skinparam SequenceLifeLineBackgroundColor #FAFAFA
+skinparam SequenceParticipantBorderColor #333
+skinparam ParticipantBackgroundColor #EEF6FF
+skinparam ActorBackgroundColor #FFF6E6
+autonumber
+
+actor "Usuário" as User
+participant "Front\n(chat panel)" as Front
+participant "QueriesRouter\n(api)" as Router
+participant "AuthMiddleware" as Auth
+participant "AnswerUseCase\n(application)" as Answer
+participant "RetrievalUseCase\n(application)" as Retrieval
+participant "DocumentRepository" as DocRepo
+participant "EmbeddingProvider\n(mesmo da ingestão)" as Embedder
+participant "ChromaVectorStore" as Vector
+participant "LLMClient\n(gpt-4o-mini)" as LLM
+participant "AuditRepository" as Audit
+database "PostgreSQL" as DB
+
+User -> Front : digita pergunta + seleciona doc + provider
+Front -> Router : POST /api/v1/queries\n(JWT, payload)
+Router -> Auth : validar token
+Auth --> Router : user autenticado
+
+Router -> Answer : execute(user, question, doc_id, provider)
+
+Answer -> DocRepo : find_by_id(doc_id)
+DocRepo --> Answer : Document
+
+alt documento de outro usuário (RGN-10)
+  Answer -> Audit : append(action=access_denied,\nstatus=forbidden,\nresource_id=doc_id)
+  Answer --> Router : raise NotFoundError
+  Router --> Front : HTTP 404 (cliente)
+  Front --> User : "documento não encontrado"
+else documento próprio ou admin
+
+  Answer -> Retrieval : execute(question, doc_id,\ntop_k=5, threshold=0.6)
+
+  group Embedding da query (cronometrado)
+    Retrieval -> Embedder : embed_query(question)
+    note right of Embedder
+      E5 local: aplica prefixo
+      "query: " automaticamente.
+    end note
+    Embedder --> Retrieval : vetor_query
+  end
+
+  group Busca vetorial (cronometrada)
+    Retrieval -> Vector : search(vetor_query, top_k=5,\nfilters={doc_id, owner_id})
+    Vector --> Retrieval : hits[] com scores
+  end
+
+  Retrieval -> Retrieval : filtrar score >= 0.6 (RGN-08)
+  Retrieval --> Answer : chunks_relevantes[]
+
+  alt nenhum chunk acima do threshold (RF-074)
+    Answer -> Audit : append(action=query_executed,\nstatus=success,\nmetadata={no_match: true})
+    Answer --> Router : QueryRecord{\n  answer: "não encontrei...",\n  sources: []\n}
+    note right of Answer
+      Não chama o LLM.
+      Economiza custo e
+      mantém honestidade.
+    end note
+  else chunks encontrados
+
+    group Geração de resposta (cronometrada)
+      Answer -> LLM : chat(context=chunks,\nquestion=pergunta)
+      LLM --> Answer : answer_text
+    end
+
+    Answer -> DB : INSERT queries(\n  user_id, doc_id, question,\n  answer, sources,\n  retrieval_time_ms,\n  llm_time_ms\n)
+    Answer -> Audit : append(action=query_executed,\nstatus=success,\nmetadata={top_score, llm_ms})
+
+    Answer --> Router : QueryRecord{\n  answer, sources,\n  metrics\n}
+  end
+
+  Router --> Front : HTTP 200 + payload
+  Front --> User : exibe resposta + fontes\n+ tempos cronometrados
+end
+
+@enduml

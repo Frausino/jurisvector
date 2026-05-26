@@ -1,10 +1,8 @@
 # =========================
-
 # PYTHON
-
 # =========================
 
-**pycache**/
+__pycache__/
 *.pyc
 *.pyo
 *.pyd
@@ -13,9 +11,7 @@
 .python-version
 
 # =========================
-
 # VIRTUAL ENVIRONMENTS
-
 # =========================
 
 .venv/
@@ -24,89 +20,133 @@ env/
 ENV/
 
 # =========================
+# UV (gerenciador de deps)
+# =========================
 
+# uv.lock DEVE ser commitado (lock de reprodutibilidade).
+.uv-cache/
+
+# =========================
 # ENVIRONMENT VARIABLES
-
 # =========================
 
 .env
 .env.*
 !.env.example
 
-# =========================
+# Segredos diversos
+*.pem
+*.key
+.secrets.baseline.local
 
+# =========================
 # VECTOR DATABASE / RAG DATA
-
 # =========================
 
+data/
 data_base/
 chroma/
+chroma.sqlite3
 faiss_index/
 *.faiss
 *.pkl
 
+# Cache de modelos HuggingFace (E5 etc)
+hf_cache/
+
 # =========================
-
 # JUPYTER
-
 # =========================
 
 .ipynb_checkpoints
 
 # =========================
-
 # IDE / EDITORS
-
 # =========================
 
 .vscode/
 .idea/
+*.swp
+*.swo
+*~
 
 # =========================
-
 # LOGS
-
 # =========================
 
 *.log
 logs/
 
 # =========================
-
 # OS FILES
-
 # =========================
 
 .DS_Store
 Thumbs.db
+desktop.ini
 
 # =========================
-
-# BUILD / CACHE
-
+# BUILD / CACHE / DIST
 # =========================
 
 build/
 dist/
 *.egg-info/
 .eggs/
+share/python-wheels/
+MANIFEST
 
 # =========================
-
-# TEST CACHE
-
+# TEST E COBERTURA
 # =========================
 
 .pytest_cache/
 .mypy_cache/
+.ruff_cache/
 .coverage
+.coverage.*
 htmlcov/
+coverage.xml
+.hypothesis/
 
 # =========================
+# DEVSECOPS / RELATORIOS GERADOS
+# =========================
 
+# Artefatos do CI que NAO devem ir para o Git
+# (sao gerados em cada run e arquivados no GitHub Actions).
+sbom.json
+bandit-report.json
+pip-audit-report.json
+
+# =========================
 # FASTAPI / UVICORN
-
 # =========================
 
 *.pid
 *.sock
+
+# =========================
+# DOCKER
+# =========================
+
+# Override local nao deve subir
+docker-compose.override.yml
+
+# =========================
+# DOCS GERADOS
+# =========================
+
+# Diagramas renderizados (PNG/SVG sao gerados do .puml; mantenha so o source)
+docs/_build/
+docs/diagrams/*.png
+docs/diagrams/*.svg
+
+# =========================
+# DIVERSOS
+# =========================
+
+*.bak
+*.tmp
+*.temp
+*.db
