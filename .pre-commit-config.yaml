@@ -5,12 +5,10 @@
 ## =============================================================
 
 default_language_version:
-  # Windows-safe: evita erro "failed to find interpreter ... python3.11".
-  # O pre-commit usará o Python disponível no ambiente atual.
+  # Windows-safe: evita erro com python3.11 inexistente no PATH.
   python: python
 
 default_stages: [pre-commit]
-
 fail_fast: false
 
 repos:
@@ -20,7 +18,7 @@ repos:
     hooks:
       - id: check-ast
       - id: check-yaml
-        args: ["--unsafe"] # permitir tags do docker-compose
+        args: ["--unsafe"]  # permitir tags do docker-compose
       - id: check-toml
       - id: check-json
       - id: check-added-large-files
@@ -37,8 +35,8 @@ repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.14.14
     hooks:
-      - id: ruff
-        args: ["check", "./src", "./tests", "--fix", "--exit-non-zero-on-fix"]
+      - id: ruff-check
+        args: ["./src", "./tests", "--fix", "--exit-non-zero-on-fix"]
         pass_filenames: false
       - id: ruff-format
         args: ["./src", "./tests"]
@@ -59,6 +57,8 @@ repos:
           - "structlog>=24.4,<25.0"
           - "types-passlib>=1.7"
           - "types-python-jose>=3.3"
+          - "pytest>=9.0.3,<10.0"
+          - "pytest-asyncio>=1.4.0,<2.0"
 
   ## SAST
   - repo: https://github.com/PyCQA/bandit
