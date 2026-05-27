@@ -43,8 +43,8 @@ jobs:
       - name: Configurar Python ${{ env.PYTHON_VERSION }}
         run: uv python install ${{ env.PYTHON_VERSION }}
 
-      - name: Sincronizar dependências (dev)
-        run: uv sync --extra dev --frozen
+      - name: Sincronizar dependências (dev + api)
+        run: uv sync --extra dev --extra api --frozen
 
       ## ========== Qualidade ==========
 
@@ -64,7 +64,7 @@ jobs:
         continue-on-error: false
 
       - name: SCA (pip-audit)
-        run: uv run pip-audit --skip-editable --ignore-vuln MAL-2026-4750 --format json --output pip-audit-report.json
+        run: uv run pip-audit --strict --skip-editable --ignore-vuln MAL-2026-4750 --format json --output pip-audit-report.json
         continue-on-error: false
 
       - name: Detecção de segredos (detect-secrets)
