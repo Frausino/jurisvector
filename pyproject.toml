@@ -10,7 +10,7 @@ keywords = ["rag", "embeddings", "compression", "fastapi", "education"]
 
 dependencies = [
     # Validação (núcleo, sem FastAPI)
-    "pydantic>=2.7,<3.0",
+    "pydantic[email]>=2.7,<3.0",
     "pydantic-settings>=2.4,<3.0",
 
     # Persistência relacional
@@ -20,6 +20,7 @@ dependencies = [
 
     # Segurança
     "passlib[bcrypt]>=1.7,<2.0",
+    "bcrypt<4.1",  # passlib 1.7.x trava em bcrypt >= 4.1 (atributo __about__ removido)
     "python-jose[cryptography]>=3.3,<4.0",
 
     # Logging
@@ -174,7 +175,10 @@ exclude = ["migrations/", "data_base/"]
 # Bibliotecas externas sem stubs publicados.
 # Conforme imports forem aparecendo nas Sprints 2 a 4, este bloco recebe
 # os módulos correspondentes (chromadb, sentence_transformers, pypdf, etc).
-module = []
+module = [
+    "slowapi",
+    "slowapi.*",
+]
 ignore_missing_imports = true
 
 # =============================================================
