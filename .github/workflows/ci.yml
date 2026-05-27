@@ -43,8 +43,8 @@ jobs:
       - name: Configurar Python ${{ env.PYTHON_VERSION }}
         run: uv python install ${{ env.PYTHON_VERSION }}
 
-      - name: Sincronizar dependências (dev)
-        run: uv sync --extra dev --frozen
+      - name: Sincronizar dependências (dev + api)
+        run: uv sync --extra dev --extra api --frozen
 
       ## ========== Qualidade ==========
 
