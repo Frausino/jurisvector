@@ -1,0 +1,126 @@
+@startuml use_case_docuvector_lite
+
+' =============================================================
+' DocuVector Lite — Diagrama de Casos de Uso
+' Origem: docs/SRS.md v1.0
+' Para renderizar:
+'   plantuml docs/diagrams/use_case.puml
+' =============================================================
+
+title DocuVector Lite — Casos de Uso (v1.0)
+
+skinparam packageStyle rectangle
+skinparam shadowing false
+skinparam ArrowColor #333
+skinparam ActorBorderColor #333
+skinparam UsecaseBorderColor #333
+skinparam UsecaseBackgroundColor #FAFAFA
+skinparam PackageBorderColor #555
+skinparam DefaultFontName "Segoe UI"
+left to right direction
+
+actor "Visitante" as Visitante
+actor "Usuário comum" as Usuario
+actor "Administrador" as Admin
+
+' Generalização: admin é também um usuário
+Admin --|> Usuario
+
+rectangle "DocuVector Lite" {
+
+  package "Autenticação" {
+    usecase "UC-01: Realizar login" as UC01
+    usecase "UC-02: Realizar logout" as UC02
+    usecase "UC-03: Visualizar perfil" as UC03
+  }
+
+  package "Gestão de documentos" {
+    usecase "UC-04: Enviar documento" as UC04
+    usecase "UC-05: Listar documentos próprios" as UC05
+    usecase "UC-06: Visualizar detalhes" as UC06
+    usecase "UC-07: Atualizar metadados" as UC07
+    usecase "UC-08: Excluir documento" as UC08
+    usecase "UC-09: Reindexar documento" as UC09
+  }
+
+  package "Consulta e resposta" {
+    usecase "UC-10: Perguntar ao documento" as UC10
+  }
+
+  package "Comparativos (diferencial)" {
+    usecase "UC-12: Benchmark de embedders" as UC12
+    usecase "UC-13: Benchmark de compressão" as UC13
+  }
+
+  package "Administração" {
+    usecase "UC-11: Visualizar todos os documentos" as UC11
+    usecase "UC-14: Consultar auditoria" as UC14
+    usecase "UC-15: Visualizar métricas globais" as UC15
+  }
+}
+
+' --- Visitante ---
+Visitante --> UC01
+
+' --- Usuário comum (e portanto Admin também) ---
+Usuario --> UC02
+Usuario --> UC03
+Usuario --> UC04
+Usuario --> UC05
+Usuario --> UC06
+Usuario --> UC07
+Usuario --> UC08
+Usuario --> UC09
+Usuario --> UC10
+Usuario --> UC12
+Usuario --> UC13
+
+' --- Administrador (exclusivos) ---
+Admin --> UC11
+Admin --> UC14
+Admin --> UC15
+
+' --- Relações entre casos de uso ---
+UC04 .> UC06 : <<extend>>
+UC10 .> UC06 : <<include>>
+UC13 .> UC06 : <<include>>
+UC12 ..> UC10 : <<extend>>
+
+note right of UC04
+  Pré-condições:
+  - Usuário autenticado
+  - Arquivo <= 10 MB
+  - Formato PDF/TXT/MD
+  - PDF com texto extraível
+  Pós-condição:
+  - Documento com status
+    "indexed" ou "failed"
+end note
+
+note right of UC10
+  Pré-condições:
+  - Usuário autenticado
+  - Documento alvo está
+    "indexed"
+  - Provedor de embedding
+    selecionado
+  Pós-condição:
+  - Resposta com fontes
+    citadas e métricas
+end note
+
+note bottom of UC13
+  Roda os 4 métodos:
+  PCA, Random Projection,
+  Int8, Binary.
+  Calcula ratio, retenção,
+  RAM e tempo.
+end note
+
+note bottom of UC14
+  RGN-10: tentativa de
+  acesso indevido aparece
+  com status=forbidden.
+end note
+
+@enduml
