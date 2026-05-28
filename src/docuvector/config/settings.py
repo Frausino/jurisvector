@@ -166,6 +166,25 @@ class Settings(BaseSettings):
     )
 
     # =============================================================
+    # Hashing de senha
+    # =============================================================
+    # Cost factor do bcrypt. Quanto maior, mais lento e mais resistente
+    # a brute force. OWASP recomenda >= 12 para produção em 2026.
+    # Em desenvolvimento/demo usamos um valor menor para responsividade
+    # em hardware de notebook, sem comprometer a segurança real do sistema
+    # (ver validador `calibrate_bcrypt_rounds_for_environment`).
+    bcrypt_rounds: int | None = Field(
+        default=None,
+        ge=4,
+        le=16,
+        alias="BCRYPT_ROUNDS",
+        description=(
+            "Cost factor do bcrypt. Se não definido, usa 12 em produção "
+            "e 10 em desenvolvimento/teste."
+        ),
+    )
+
+    # =============================================================
     # Validators
     # =============================================================
     @field_validator("app_env", mode="before")
@@ -215,6 +234,21 @@ class Settings(BaseSettings):
     # =============================================================
     # Propriedades derivadas
     # =============================================================
+    @property
+    def effective_bcrypt_rounds(self) -> int:
+        """Cost do bcrypt resolvido por ambiente.
+
+        Precedência:
+        1. Valor explícito em BCRYPT_ROUNDS (se definido no .env).
+        2. Produção: 12 (OWASP Password Storage Cheat Sheet 2026).
+        3. Desenvolvimento/teste: 10 (responsivo em hardware de demo,
+           ainda dentro da faixa segura; cada incremento dobra o custo,
+           então 10 é ~4x mais rápido que 12).
+        """
+        if self.bcrypt_rounds is not None:
+            return self.bcrypt_rounds
+        return 12 if self.is_production else 10
+
     @property
     def is_development(self) -> bool:
         return self.app_env is ApplicationEnvironment.DEVELOPMENT
