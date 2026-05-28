@@ -20,9 +20,9 @@ default:
 ## Bootstrap
 ## =============================================================
 
-## Sincroniza ambiente virtual a partir do pyproject + uv.lock
+## Sincroniza ambiente virtual a partir do pyproject + uv.lock (dev + api)
 sync:
-    uv sync --extra dev
+    uv sync --extra dev --extra api
 
 ## Sincroniza e instala hooks de pré-commit
 bootstrap: sync precommit-install secrets-baseline
@@ -70,11 +70,11 @@ sast:
     uv run bandit -c pyproject.toml -r src
 
 ## SCA (pip-audit) — audita o ambiente Python instalado.
-## --strict: falha se algum pacote for skipado por motivo desconhecido.
 ## --skip-editable: ignora o próprio docuvector-lite (não está no PyPI).
 ## --ignore-vuln: ver justificativa em .pip-audit.toml.
 sca:
     uv run pip-audit --skip-editable --ignore-vuln MAL-2026-4750
+
 ## Detecção de segredos
 secrets-scan:
     uv run detect-secrets scan --baseline .secrets.baseline
@@ -108,7 +108,7 @@ test-integration:
 ## =============================================================
 
 ## Roda tudo que o GitHub Actions vai rodar (em ordem)
-ci: lint format-check type sast sca sbom smoke
+ci: lint format-check type sast sca sbom test-unit smoke
     @echo "CI local OK"
 
 ## Rodar todos os hooks de pre-commit em todos os arquivos
@@ -138,7 +138,8 @@ ps:
 ## Logs ao vivo do Postgres
 logs:
     docker compose --env-file .env -f docker/docker-compose.yml logs -f postgres
-## Shell psql dentro do container
+
+## Shell psql dentro do container (pede senha do POSTGRES_PASSWORD)
 psql:
     docker exec -it docuvector-postgres psql -U docuvector_app -d docuvector
 
@@ -153,6 +154,18 @@ dev:
 ## Roda servidor sem reload (mais próximo de produção)
 serve:
     uv run uvicorn docuvector.main:app --host 0.0.0.0 --port 8000
+
+## =============================================================
+## Bootstrap operacional
+## =============================================================
+
+## Cria os 3 usuários iniciais (admin + user1 + user2) a partir do .env
+seed:
+    uv run python -m scripts.seed_users
+
+## =============================================================
+## Migrations Alembic
+## =============================================================
 
 ## Aplica migrations Alembic
 migrate:

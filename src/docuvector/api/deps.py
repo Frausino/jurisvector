@@ -7,9 +7,12 @@ suas dependências infra-resolvidas a partir do Settings.
 
 from __future__ import annotations
 
+from functools import lru_cache
+from ipaddress import ip_address
 from typing import Annotated
 
 from fastapi import Depends, Header, HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from docuvector.application.auth_use_case import AuthUseCase
@@ -22,6 +25,12 @@ from docuvector.infrastructure.persistence.database import get_session_factory, 
 from docuvector.infrastructure.persistence.user_repository_impl import SqlAlchemyUserRepository
 from docuvector.infrastructure.security.bcrypt_hasher import BcryptPasswordHasher
 from docuvector.infrastructure.security.jwt_service import JwtTokenService
+
+# Esquema de segurança Bearer. auto_error=False para que a ausência de
+# credenciais produza nosso 401 padronizado (com WWW-Authenticate), em vez
+# do 403 genérico do FastAPI. Registrar este esquema faz o Swagger exibir
+# o botão "Authorize" (cadeado), que injeta o prefixo Bearer automaticamente.
+_bearer_scheme = HTTPBearer(auto_error=False)
 
 
 # =============================================================
@@ -37,20 +46,34 @@ SessionDependency = Annotated[Session, Depends(provide_session)]
 
 
 # =============================================================
-# Serviços de segurança (singletons por requisição; baratos de criar)
+# Serviços de segurança (singletons de processo)
 # =============================================================
-def provide_password_hasher() -> BcryptPasswordHasher:
-    """Hasher bcrypt com cost padrão 12."""
-    return BcryptPasswordHasher()
+@lru_cache(maxsize=1)
+def get_password_hasher() -> BcryptPasswordHasher:
+    """Hasher bcrypt singleton de processo.
+
+    Cacheado porque o CryptContext do passlib é caro de construir e é
+    thread-safe para hash/verify. Reconstruí-lo por request desperdiçava
+    CPU e anulava o cache do timing equalizer no AuthUseCase.
+    O cost é resolvido por ambiente (ver Settings.effective_bcrypt_rounds).
+    """
+    return BcryptPasswordHasher(rounds=get_settings().effective_bcrypt_rounds)
 
 
-def provide_token_service(settings: SettingsDependency) -> JwtTokenService:
-    """Serviço JWT configurado a partir do Settings."""
+@lru_cache(maxsize=1)
+def get_token_service() -> JwtTokenService:
+    """Serviço JWT singleton de processo, configurado a partir do Settings."""
+    settings = get_settings()
     return JwtTokenService(
         secret_key=settings.jwt_secret_key.get_secret_value(),
         algorithm=settings.jwt_algorithm,
         access_token_expire_minutes=settings.jwt_access_token_expire_minutes,
     )
+
+
+def provide_token_service() -> JwtTokenService:
+    """Dependency FastAPI que devolve o serviço JWT singleton."""
+    return get_token_service()
 
 
 TokenServiceDependency = Annotated[JwtTokenService, Depends(provide_token_service)]
@@ -69,10 +92,14 @@ def provide_auth_use_case(
     Atenção: `AuditRepository` recebe o `session_factory` (não a session
     do request), porque audit log é transação autônoma. Ver
     `audit_repository_impl.py` para a justificativa NIST SP 800-53 AU-2.
+
+    O `password_hasher` é o singleton de processo (get_password_hasher),
+    não uma instância nova por request. Isso preserva o cache do timing
+    equalizer entre requisições.
     """
     return AuthUseCase(
         user_repository=SqlAlchemyUserRepository(session),
-        password_hasher=provide_password_hasher(),
+        password_hasher=get_password_hasher(),
         token_service=token_service,
         audit_repository=SqlAlchemyAuditRepository(get_session_factory()),
         token_expire_minutes=settings.jwt_access_token_expire_minutes,
@@ -83,27 +110,27 @@ AuthUseCaseDependency = Annotated[AuthUseCase, Depends(provide_auth_use_case)]
 
 
 # =============================================================
-# Autenticação por header Authorization: Bearer <token>
+# Autenticação via esquema Bearer (HTTPBearer)
 # =============================================================
 def require_authenticated_user(
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer_scheme)],
     token_service: TokenServiceDependency,
-    authorization: Annotated[str | None, Header()] = None,
 ) -> TokenPayload:
-    """Dependency que protege rotas exigindo JWT válido.
+    """Dependency que protege rotas exigindo JWT válido no esquema Bearer.
 
-    Retorna o `TokenPayload`. O router pode então chamar
-    `auth_use_case.me(payload)` para obter a entidade fresh do banco.
+    Usa `HTTPBearer`, que extrai o token do header `Authorization: Bearer <token>`
+    e registra o esquema no OpenAPI (botão Authorize no Swagger).
+    Retorna o `TokenPayload`; o router pode então chamar `auth_use_case.me()`.
     """
-    if not authorization or not authorization.lower().startswith("bearer "):
+    if credentials is None or not credentials.credentials:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Não autenticado.",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    raw_token = authorization.split(" ", 1)[1].strip()
     try:
-        return token_service.verify(raw_token)
+        return token_service.verify(credentials.credentials)
     except AuthenticationError as authentication_failure:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -129,20 +156,48 @@ def require_admin(token_payload: CurrentTokenDependency) -> TokenPayload:
     return token_payload
 
 
+def _normalize_ip(candidate: str | None) -> str | None:
+    """Valida e normaliza um IP textual.
+
+    Retorna o IP canônico em string ou `None` quando o valor é vazio,
+    malformado ou não representa um endereço IP real.
+    """
+    if not candidate:
+        return None
+
+    normalized_candidate = candidate.strip()
+    if not normalized_candidate:
+        return None
+
+    try:
+        return str(ip_address(normalized_candidate))
+    except ValueError:
+        return None
+
+
 def get_client_ip(
     forwarded_for: Annotated[str | None, Header(alias="X-Forwarded-For")] = None,
     real_ip: Annotated[str | None, Header(alias="X-Real-IP")] = None,
 ) -> str | None:
-    """Extrai o IP do cliente, considerando proxies reversos comuns.
+    def _normalize(value: str | None) -> str | None:
+        if not value:
+            return None
+        candidate = value.strip()
+        try:
+            return str(ip_address(candidate))
+        except ValueError:
+            return None
 
-    Em desenvolvimento (localhost direto) retorna None; o router
-    persiste como NULL no audit_logs. Em produção com proxy, lê
-    o primeiro IP de X-Forwarded-For.
-    """
     if forwarded_for:
-        return forwarded_for.split(",")[0].strip()
-    if real_ip:
-        return real_ip.strip()
+        first_ip = forwarded_for.split(",", maxsplit=1)[0]
+        normalized = _normalize(first_ip)
+        if normalized:
+            return normalized
+
+    normalized = _normalize(real_ip)
+    if normalized:
+        return normalized
+
     return None
 
 
