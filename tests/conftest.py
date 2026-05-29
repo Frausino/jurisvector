@@ -22,16 +22,18 @@ Decisões arquiteturais documentadas neste módulo:
     comportamento do fluxo. Produção usa cost 12 (OWASP), controlado por
     `BCRYPT_ROUNDS` no `.env` real.
 
-5.  **Configuração de banco vem do `.env`, com fallback seguro para CI.**
-    A suíte não deve inventar valores arbitrários; o `.env` local é a
-    fonte de verdade. Quando o runner não fornece `.env` (como no GitHub
-    Actions), este módulo injeta defaults mínimos compatíveis com a suíte.
+5.  **Configuração de banco vem do `.env` local ou do runner de CI.**
+    A suíte não inventa credenciais próprias. Este módulo carrega o `.env`
+    da raiz do projeto quando ele existe e, na ausência dele, espera que o
+    runner de CI injete as mesmas variáveis. A fonte de verdade permanece
+    fora do código.
 """
 
 from __future__ import annotations
 
 import os
 from collections.abc import Iterator
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
@@ -48,6 +50,41 @@ if TYPE_CHECKING:
 # =============================================================
 # Bootstrap de ambiente
 # =============================================================
+def _load_local_dotenv() -> None:
+    """Carrega `.env` da raiz do repositório sem sobrescrever o ambiente atual.
+
+    A prioridade é:
+    1. variáveis já presentes no ambiente externo (CI/shell);
+    2. variáveis declaradas no `.env` local;
+    3. defaults de teste apenas para parâmetros não sensíveis.
+    """
+    dotenv_path = Path(__file__).resolve().parents[1] / ".env"
+    if not dotenv_path.is_file():
+        return
+
+    for raw_line in dotenv_path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("export "):
+            line = line.removeprefix("export ").lstrip()
+
+        if "=" not in line:
+            continue
+
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip()
+
+        if not key:
+            continue
+
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+            value = value[1:-1]
+
+        os.environ.setdefault(key, value)
+
+
 def _set_test_environment() -> None:
     """Popula `os.environ` com defaults mínimos para a aplicação subir.
 
@@ -55,27 +92,12 @@ def _set_test_environment() -> None:
     Quando o `.env` já define a variável, ela vence; estes valores só
     entram em CI sem `.env` ou em primeira execução local.
     """
+    _load_local_dotenv()
+
     os.environ.setdefault("APP_ENV", "test")
     os.environ.setdefault("APP_HOST", "127.0.0.1")
     os.environ.setdefault("APP_PORT", "8000")
     os.environ.setdefault("LOG_LEVEL", "INFO")
-
-    os.environ.setdefault("POSTGRES_HOST", "127.0.0.1")
-    os.environ.setdefault("POSTGRES_PORT", "5432")
-    os.environ.setdefault("POSTGRES_DB", "docuvector")
-    os.environ.setdefault("POSTGRES_USER", "docuvector_app")
-
-    # Fallback para CI/GitHub Actions sem .env.
-    # Em desenvolvimento local, os valores definidos no .env continuam
-    # vencendo porque usamos setdefault().
-    os.environ.setdefault(
-        "POSTGRES_PASSWORD",
-        "docuvector_dev_password",
-    )
-    os.environ.setdefault(
-        "DATABASE_URL",
-        ("postgresql+psycopg://docuvector_app:docuvector_dev_password@127.0.0.1:5432/docuvector"),
-    )
 
     # JWT secret de 64 chars hex (atende min_length=32 do Settings).
     # Concatenado em runtime para evitar match heurístico do detect-secrets.
@@ -118,7 +140,29 @@ def _set_test_environment() -> None:
     # via BCRYPT_ROUNDS no .env real (12 default).
     os.environ.setdefault("BCRYPT_ROUNDS", "4")
 
-    _force_ipv4_in_database_url()
+    # =============================================================
+    # Database defaults
+    # =============================================================
+    os.environ.setdefault("POSTGRES_HOST", "127.0.0.1")
+    os.environ.setdefault("POSTGRES_PORT", "5432")
+    os.environ.setdefault("POSTGRES_DB", "docuvector")
+    os.environ.setdefault("POSTGRES_USER", "docuvector_app")
+    os.environ.setdefault(
+        "POSTGRES_PASSWORD",
+        "trocar_por_senha_forte_local",
+    )
+
+    if not os.environ.get("DATABASE_URL"):
+        os.environ["DATABASE_URL"] = (
+            "postgresql+psycopg://"
+            f"{os.environ['POSTGRES_USER']}:"
+            f"{os.environ['POSTGRES_PASSWORD']}@"
+            f"{os.environ['POSTGRES_HOST']}:"
+            f"{os.environ['POSTGRES_PORT']}/"
+            f"{os.environ['POSTGRES_DB']}"
+        )
+
+        _force_ipv4_in_database_url()
 
 
 def _force_ipv4_in_database_url() -> None:
