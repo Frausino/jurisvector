@@ -21,6 +21,23 @@ env:
 
 jobs:
   quality-gates:
+     services:
+      postgres:
+        image: postgres:16-alpine
+
+        env:
+          POSTGRES_DB: docuvector
+          POSTGRES_USER: docuvector_app
+          POSTGRES_PASSWORD: trocar_por_senha_forte_local
+
+        ports:
+          - 5432:5432
+
+        options: >-
+          --health-cmd="pg_isready -U docuvector_app -d docuvector"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
     name: Quality & Security Gates
     runs-on: ubuntu-latest
     timeout-minutes: 15

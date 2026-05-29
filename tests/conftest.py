@@ -47,16 +47,6 @@ if TYPE_CHECKING:
     from docuvector.domain.entities import User
 
 
-_REQUIRED_DATABASE_ENV_VARS = (
-    "POSTGRES_HOST",
-    "POSTGRES_PORT",
-    "POSTGRES_DB",
-    "POSTGRES_USER",
-    "POSTGRES_PASSWORD",
-    "DATABASE_URL",
-)
-
-
 # =============================================================
 # Bootstrap de ambiente
 # =============================================================
@@ -93,18 +83,6 @@ def _load_local_dotenv() -> None:
             value = value[1:-1]
 
         os.environ.setdefault(key, value)
-
-
-def _require_env_vars(*names: str) -> None:
-    """Garante que variáveis críticas estejam disponíveis antes do bootstrap."""
-    missing = [name for name in names if not os.environ.get(name)]
-    if missing:
-        joined = ", ".join(missing)
-        raise RuntimeError(
-            "Variáveis de ambiente ausentes para os testes: "
-            f"{joined}. Configure o `.env` local ou injete os mesmos "
-            "valores no runner de CI.",
-        )
 
 
 def _set_test_environment() -> None:
@@ -162,8 +140,29 @@ def _set_test_environment() -> None:
     # via BCRYPT_ROUNDS no .env real (12 default).
     os.environ.setdefault("BCRYPT_ROUNDS", "4")
 
-    _require_env_vars(*_REQUIRED_DATABASE_ENV_VARS)
-    _force_ipv4_in_database_url()
+    # =============================================================
+    # Database defaults
+    # =============================================================
+    os.environ.setdefault("POSTGRES_HOST", "127.0.0.1")
+    os.environ.setdefault("POSTGRES_PORT", "5432")
+    os.environ.setdefault("POSTGRES_DB", "docuvector")
+    os.environ.setdefault("POSTGRES_USER", "docuvector_app")
+    os.environ.setdefault(
+        "POSTGRES_PASSWORD",
+        "trocar_por_senha_forte_local",
+    )
+
+    if not os.environ.get("DATABASE_URL"):
+        os.environ["DATABASE_URL"] = (
+            "postgresql+psycopg://"
+            f"{os.environ['POSTGRES_USER']}:"
+            f"{os.environ['POSTGRES_PASSWORD']}@"
+            f"{os.environ['POSTGRES_HOST']}:"
+            f"{os.environ['POSTGRES_PORT']}/"
+            f"{os.environ['POSTGRES_DB']}"
+        )
+
+        _force_ipv4_in_database_url()
 
 
 def _force_ipv4_in_database_url() -> None:
