@@ -16,12 +16,16 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from docuvector.application.auth_use_case import AuthUseCase
+from docuvector.application.document_crud_use_case import DocumentCrudUseCase
 from docuvector.config.settings import Settings, get_settings
 from docuvector.domain.enums import UserRole
 from docuvector.domain.exceptions import AuthenticationError
 from docuvector.domain.interfaces.token_service import TokenPayload
 from docuvector.infrastructure.persistence.audit_repository_impl import SqlAlchemyAuditRepository
 from docuvector.infrastructure.persistence.database import get_session_factory, provide_session
+from docuvector.infrastructure.persistence.document_repository_impl import (
+    SqlAlchemyDocumentRepository,
+)
 from docuvector.infrastructure.persistence.user_repository_impl import SqlAlchemyUserRepository
 from docuvector.infrastructure.security.bcrypt_hasher import BcryptPasswordHasher
 from docuvector.infrastructure.security.jwt_service import JwtTokenService
@@ -50,13 +54,7 @@ SessionDependency = Annotated[Session, Depends(provide_session)]
 # =============================================================
 @lru_cache(maxsize=1)
 def get_password_hasher() -> BcryptPasswordHasher:
-    """Hasher bcrypt singleton de processo.
-
-    Cacheado porque o CryptContext do passlib é caro de construir e é
-    thread-safe para hash/verify. Reconstruí-lo por request desperdiçava
-    CPU e anulava o cache do timing equalizer no AuthUseCase.
-    O cost é resolvido por ambiente (ver Settings.effective_bcrypt_rounds).
-    """
+    """Hasher bcrypt singleton de processo."""
     return BcryptPasswordHasher(rounds=get_settings().effective_bcrypt_rounds)
 
 
@@ -92,10 +90,6 @@ def provide_auth_use_case(
     Atenção: `AuditRepository` recebe o `session_factory` (não a session
     do request), porque audit log é transação autônoma. Ver
     `audit_repository_impl.py` para a justificativa NIST SP 800-53 AU-2.
-
-    O `password_hasher` é o singleton de processo (get_password_hasher),
-    não uma instância nova por request. Isso preserva o cache do timing
-    equalizer entre requisições.
     """
     return AuthUseCase(
         user_repository=SqlAlchemyUserRepository(session),
@@ -109,6 +103,26 @@ def provide_auth_use_case(
 AuthUseCaseDependency = Annotated[AuthUseCase, Depends(provide_auth_use_case)]
 
 
+def provide_document_crud_use_case(
+    session: SessionDependency,
+) -> DocumentCrudUseCase:
+    """Monta o `DocumentCrudUseCase` com as dependências concretas.
+
+    Audit usa session_factory autônoma (mesma decisão do AuthUseCase):
+    o log precisa sobreviver a rollback da operação principal.
+    """
+    return DocumentCrudUseCase(
+        document_repository=SqlAlchemyDocumentRepository(session),
+        audit_repository=SqlAlchemyAuditRepository(get_session_factory()),
+    )
+
+
+DocumentCrudUseCaseDependency = Annotated[
+    DocumentCrudUseCase,
+    Depends(provide_document_crud_use_case),
+]
+
+
 # =============================================================
 # Autenticação via esquema Bearer (HTTPBearer)
 # =============================================================
@@ -116,12 +130,7 @@ def require_authenticated_user(
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer_scheme)],
     token_service: TokenServiceDependency,
 ) -> TokenPayload:
-    """Dependency que protege rotas exigindo JWT válido no esquema Bearer.
-
-    Usa `HTTPBearer`, que extrai o token do header `Authorization: Bearer <token>`
-    e registra o esquema no OpenAPI (botão Authorize no Swagger).
-    Retorna o `TokenPayload`; o router pode então chamar `auth_use_case.me()`.
-    """
+    """Dependency que protege rotas exigindo JWT válido no esquema Bearer."""
     if credentials is None or not credentials.credentials:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -143,11 +152,7 @@ CurrentTokenDependency = Annotated[TokenPayload, Depends(require_authenticated_u
 
 
 def require_admin(token_payload: CurrentTokenDependency) -> TokenPayload:
-    """Reforça que o usuário autenticado tem papel `admin`.
-
-    Usado em rotas administrativas (auditoria, métricas globais).
-    """
-
+    """Reforça que o usuário autenticado tem papel `admin`."""
     if token_payload.role is not UserRole.ADMIN:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -156,11 +161,15 @@ def require_admin(token_payload: CurrentTokenDependency) -> TokenPayload:
     return token_payload
 
 
+# =============================================================
+# Resolução de IP do cliente
+# =============================================================
 def _normalize_ip(candidate: str | None) -> str | None:
     """Valida e normaliza um IP textual.
 
     Retorna o IP canônico em string ou `None` quando o valor é vazio,
-    malformado ou não representa um endereço IP real.
+    malformado ou não representa um endereço IP real. Defesa para a
+    coluna INET do Postgres (rejeita strings como "testclient").
     """
     if not candidate:
         return None
@@ -179,26 +188,14 @@ def get_client_ip(
     forwarded_for: Annotated[str | None, Header(alias="X-Forwarded-For")] = None,
     real_ip: Annotated[str | None, Header(alias="X-Real-IP")] = None,
 ) -> str | None:
-    def _normalize(value: str | None) -> str | None:
-        if not value:
-            return None
-        candidate = value.strip()
-        try:
-            return str(ip_address(candidate))
-        except ValueError:
-            return None
-
+    """Extrai e valida o IP do cliente a partir de headers padrão."""
     if forwarded_for:
         first_ip = forwarded_for.split(",", maxsplit=1)[0]
-        normalized = _normalize(first_ip)
+        normalized = _normalize_ip(first_ip)
         if normalized:
             return normalized
 
-    normalized = _normalize(real_ip)
-    if normalized:
-        return normalized
-
-    return None
+    return _normalize_ip(real_ip)
 
 
 ClientIpDependency = Annotated[str | None, Depends(get_client_ip)]

@@ -17,6 +17,7 @@ from slowapi.errors import RateLimitExceeded
 
 from docuvector import __version__
 from docuvector.api.routers import auth as auth_router
+from docuvector.api.routers import documents as documents_router
 from docuvector.api.routers import health
 from docuvector.config.settings import Settings, get_settings
 from docuvector.domain.exceptions import (
@@ -103,6 +104,7 @@ def create_app() -> FastAPI:
 
     fastapi_app.include_router(health.router)
     fastapi_app.include_router(auth_router.router)
+    fastapi_app.include_router(documents_router.router)
 
     return fastapi_app
 
