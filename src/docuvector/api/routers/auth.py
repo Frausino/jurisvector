@@ -1,11 +1,6 @@
-"""Router de autenticação: `/api/v1/auth/login` e `/api/v1/auth/me`.
-
-Traduz HTTP <-> use case. Sem regra de negócio aqui.
-"""
-
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, Request, status
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
@@ -16,7 +11,6 @@ from docuvector.api.deps import (
 )
 from docuvector.api.schemas.auth import LoginRequest, LoginResponse, UserResponse
 from docuvector.config.settings import get_settings
-from docuvector.domain.exceptions import AuthenticationError
 
 _settings = get_settings()
 _LOGIN_RATE = f"{_settings.login_rate_limit_per_minute}/minute"
@@ -44,25 +38,18 @@ router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 )
 @limiter.limit(_LOGIN_RATE)
 def login(
-    request: Request,  # exigido pelo slowapi; mantido para anti-flake8
+    request: Request,
     payload: LoginRequest,
     auth_use_case: AuthUseCaseDependency,
     client_ip: ClientIpDependency,
 ) -> LoginResponse:
     user_agent_header = request.headers.get("user-agent")
-    try:
-        login_result = auth_use_case.login(
-            email=payload.email,
-            plain_password=payload.password,
-            client_ip=client_ip or request.client.host if request.client else client_ip,
-            user_agent=user_agent_header,
-        )
-    except AuthenticationError as authentication_failure:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=str(authentication_failure),
-            headers={"WWW-Authenticate": "Bearer"},
-        ) from authentication_failure
+    login_result = auth_use_case.login(
+        email=payload.email,
+        plain_password=payload.password,
+        client_ip=client_ip,
+        user_agent=user_agent_header,
+    )
 
     return LoginResponse(
         access_token=login_result.access_token,
@@ -83,13 +70,5 @@ def me(
     token_payload: CurrentTokenDependency,
     auth_use_case: AuthUseCaseDependency,
 ) -> UserResponse:
-    try:
-        user = auth_use_case.me(token_payload)
-    except AuthenticationError as session_failure:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=str(session_failure),
-            headers={"WWW-Authenticate": "Bearer"},
-        ) from session_failure
-
+    user = auth_use_case.me(token_payload)
     return UserResponse.model_validate(user)
