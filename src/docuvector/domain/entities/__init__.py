@@ -1,6 +1,16 @@
 """Entidades puras de domínio."""
 
 from docuvector.domain.entities.audit_event import AuditEvent
+from docuvector.domain.entities.document import Document
+from docuvector.domain.entities.document_chunk import DocumentChunk
+from docuvector.domain.entities.retrieval import Answer, RetrievedChunk
 from docuvector.domain.entities.user import User
 
-__all__ = ["AuditEvent", "User"]
+__all__ = [
+    "Answer",
+    "AuditEvent",
+    "Document",
+    "DocumentChunk",
+    "RetrievedChunk",
+    "User",
+]
