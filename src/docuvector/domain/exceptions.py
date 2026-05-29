@@ -39,3 +39,30 @@ class ValidationError(DocuvectorError):
 
 class DuplicateResourceError(DocuvectorError):
     """Tentativa de criar recurso que viola constraint de unicidade."""
+
+
+# =============================================================
+# Pipeline RAG (Sprint 3+)
+# =============================================================
+class DocumentExtractionError(DocuvectorError):
+    """Falha ao extrair texto de um documento (PDF corrompido, etc)."""
+
+
+class DocumentTooLargeError(ValidationError):
+    """Tamanho do upload acima do limite configurado em UPLOAD_MAX_BYTES."""
+
+
+class UnsupportedFileFormatError(ValidationError):
+    """Formato de arquivo enviado não está em FileFormat."""
+
+
+class EmbeddingGenerationError(DocuvectorError):
+    """Provedor de embeddings retornou erro ou vetor de dimensão inválida."""
+
+
+class VectorStoreError(DocuvectorError):
+    """Falha em operação do VectorStore (indexação, busca, deleção)."""
+
+
+class LlmGenerationError(DocuvectorError):
+    """Falha na chamada ao LLM (rede, rate limit, conteúdo bloqueado)."""
