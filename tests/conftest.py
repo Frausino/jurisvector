@@ -22,10 +22,10 @@ Decisões arquiteturais documentadas neste módulo:
     comportamento do fluxo. Produção usa cost 12 (OWASP), controlado por
     `BCRYPT_ROUNDS` no `.env` real.
 
-5.  **Configuração de banco vem do `.env`.** A suíte não deve inventar uma
-    senha própria. O `.env` local é a fonte de verdade para
-    `POSTGRES_PASSWORD` e `DATABASE_URL`; este módulo apenas normaliza
-    `localhost` para `127.0.0.1` quando necessário.
+5.  **Configuração de banco vem do `.env`, com fallback seguro para CI.**
+    A suíte não deve inventar valores arbitrários; o `.env` local é a
+    fonte de verdade. Quando o runner não fornece `.env` (como no GitHub
+    Actions), este módulo injeta defaults mínimos compatíveis com a suíte.
 """
 
 from __future__ import annotations
@@ -64,6 +64,18 @@ def _set_test_environment() -> None:
     os.environ.setdefault("POSTGRES_PORT", "5432")
     os.environ.setdefault("POSTGRES_DB", "docuvector")
     os.environ.setdefault("POSTGRES_USER", "docuvector_app")
+
+    # Fallback para CI/GitHub Actions sem .env.
+    # Em desenvolvimento local, os valores definidos no .env continuam
+    # vencendo porque usamos setdefault().
+    os.environ.setdefault(
+        "POSTGRES_PASSWORD",
+        "docuvector_dev_password",
+    )
+    os.environ.setdefault(
+        "DATABASE_URL",
+        ("postgresql+psycopg://docuvector_app:docuvector_dev_password@127.0.0.1:5432/docuvector"),
+    )
 
     # JWT secret de 64 chars hex (atende min_length=32 do Settings).
     # Concatenado em runtime para evitar match heurístico do detect-secrets.
