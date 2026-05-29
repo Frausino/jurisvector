@@ -22,9 +22,10 @@ Decisões arquiteturais documentadas neste módulo:
     comportamento do fluxo. Produção usa cost 12 (OWASP), controlado por
     `BCRYPT_ROUNDS` no `.env` real.
 
-5.  **Credenciais embutidas neste arquivo são de DEV apenas.** Estão
-    marcadas com `# pragma: allowlist secret` para o detect-secrets e
-    nunca correspondem a segredos de produção.
+5.  **Configuração de banco vem do `.env`.** A suíte não deve inventar uma
+    senha própria. O `.env` local é a fonte de verdade para
+    `POSTGRES_PASSWORD` e `DATABASE_URL`; este módulo apenas normaliza
+    `localhost` para `127.0.0.1` quando necessário.
 """
 
 from __future__ import annotations
@@ -54,7 +55,7 @@ def _set_test_environment() -> None:
     Quando o `.env` já define a variável, ela vence; estes valores só
     entram em CI sem `.env` ou em primeira execução local.
     """
-    os.environ.setdefault("APP_ENV", "testing")
+    os.environ.setdefault("APP_ENV", "test")
     os.environ.setdefault("APP_HOST", "127.0.0.1")
     os.environ.setdefault("APP_PORT", "8000")
     os.environ.setdefault("LOG_LEVEL", "INFO")
@@ -63,18 +64,6 @@ def _set_test_environment() -> None:
     os.environ.setdefault("POSTGRES_PORT", "5432")
     os.environ.setdefault("POSTGRES_DB", "docuvector")
     os.environ.setdefault("POSTGRES_USER", "docuvector_app")
-    os.environ.setdefault(
-        "POSTGRES_PASSWORD",
-        "docuvector_dev_password",  # pragma: allowlist secret
-    )
-    # Senha de DEV apenas; produção sempre vem do .env real. A URL está
-    # quebrada em duas literais (concatenação implícita) para respeitar
-    # o limite de 100 caracteres por linha do ruff (E501).
-    os.environ.setdefault(
-        "DATABASE_URL",
-        "postgresql+psycopg://docuvector_app:docuvector_dev_password"  # pragma: allowlist secret
-        "@127.0.0.1:5432/docuvector",
-    )
 
     # JWT secret de 64 chars hex (atende min_length=32 do Settings).
     # Concatenado em runtime para evitar match heurístico do detect-secrets.
