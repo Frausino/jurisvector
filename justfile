@@ -20,12 +20,12 @@ default:
 ## Bootstrap
 ## =============================================================
 
-## Sincroniza ambiente virtual a partir do pyproject + uv.lock (dev + api)
+## Sincroniza ambiente virtual a partir do pyproject + uv.lock (dev default group + api extra)
 sync:
-    uv sync --extra dev --extra api
+    uv sync --extra api
 
 ## Sincroniza e instala hooks de pré-commit
-bootstrap: sync precommit-install secrets-baseline
+bootstrap: sync precommit-install
     @echo "Bootstrap concluído"
 
 ## Instala hooks pre-commit e pre-push
@@ -36,6 +36,9 @@ precommit-install:
 ## Gera baseline inicial de detect-secrets (rodar uma vez)
 secrets-baseline:
     uv run detect-secrets scan --baseline .secrets.baseline
+
+## Alias explícito para gerar baseline inicial de segredos
+secrets-baseline-init: secrets-baseline
 
 ## =============================================================
 ## Qualidade de código
@@ -97,18 +100,18 @@ test:
 
 ## Testes unitários apenas
 test-unit:
-    uv run pytest tests/unit -m unit
+    uv run pytest tests/unit -m unit --no-cov
 
 ## Testes de integração apenas
 test-integration:
-    uv run pytest tests/integration -m integration
+    uv run pytest tests/integration -m integration --no-cov
 
 ## =============================================================
 ## Pipeline local equivalente ao CI
 ## =============================================================
 
 ## Roda tudo que o GitHub Actions vai rodar (em ordem)
-ci: lint format-check type sast sca sbom test-unit smoke
+ci: lint format-check type sast sca sbom test smoke
     @echo "CI local OK"
 
 ## Rodar todos os hooks de pre-commit em todos os arquivos
