@@ -1,11 +1,8 @@
-"""Schemas Pydantic de entrada e saída do router de autenticação.
-
-São contratos HTTP, não entidades de domínio. Mantemos separados
-para que o formato wire possa evoluir sem afetar o domínio.
-"""
+"""Schemas Pydantic para autenticação e gestão de usuários."""
 
 from __future__ import annotations
 
+from datetime import datetime
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
@@ -13,42 +10,89 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field
 from docuvector.domain.enums import UserRole
 
 
+# =============================================================
+# Login
+# =============================================================
 class LoginRequest(BaseModel):
-    """Payload de login. Restritivo: só email e senha, nada mais.
+    model_config = ConfigDict(frozen=True)
 
-    `extra="forbid"` bloqueia mass assignment: cliente não pode tentar
-    enviar `role` ou `is_active` no corpo.
-    """
-
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-
-    email: EmailStr = Field(description="E-mail do usuário.")
-    password: str = Field(min_length=1, description="Senha em claro.")
+    email: EmailStr
+    password: str = Field(min_length=1)
 
 
 class LoginResponse(BaseModel):
-    """Resposta do login bem-sucedido."""
+    model_config = ConfigDict(frozen=True)
 
-    access_token: str = Field(description="JWT serializado.")
-    token_type: str = Field(default="bearer", description="Tipo do token.")
-    expires_in: int = Field(description="Tempo de vida em segundos.")
+    access_token: str
+    token_type: str
+    expires_in: int
 
 
-class UserResponse(BaseModel):
-    """Representação pública do usuário.
+# =============================================================
+# Registro público
+# =============================================================
+class RegisterRequest(BaseModel):
+    """Payload de auto-cadastro.
 
-    NUNCA inclui `password_hash`. Restringe quais campos a API expõe.
+    Validação real da senha (política NIST) acontece no use case.
+    Pydantic só rejeita strings absurdamente longas.
     """
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(frozen=True)
+
+    email: EmailStr
+    password: str = Field(min_length=1, max_length=128)
+
+
+class RegistrationAcknowledgement(BaseModel):
+    """Resposta GENÉRICA do /register (defesa anti-enumeração).
+
+    Mesmo conteúdo para criação real e para email já existente.
+    NÃO inclui o `id` nem o `email` confirmado, porque devolver isso
+    seria recriar o vazamento de enumeração que estamos eliminando.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    message: str
+
+
+# =============================================================
+# Representação pública de User
+# =============================================================
+class UserResponse(BaseModel):
+    """Forma pública de um usuário. Nunca inclui `password_hash`."""
+
+    model_config = ConfigDict(from_attributes=True, frozen=True)
 
     id: UUID
     email: EmailStr
     role: UserRole
     is_active: bool
+    created_at: datetime
 
 
-class ErrorResponse(BaseModel):
-    """Formato padronizado de erro da API."""
+# =============================================================
+# Admin endpoints
+# =============================================================
+class AdminCreateUserRequest(BaseModel):
+    model_config = ConfigDict(frozen=True)
 
-    error: dict[str, str | dict[str, str]]
+    email: EmailStr
+    password: str = Field(min_length=1, max_length=128)
+    role: UserRole = UserRole.USER
+
+
+class AdminChangeRoleRequest(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    role: UserRole
+
+
+class UserListResponse(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    items: list[UserResponse]
+    total: int = Field(ge=0)
+    limit: int = Field(gt=0)
+    offset: int = Field(ge=0)

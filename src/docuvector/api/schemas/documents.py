@@ -1,10 +1,4 @@
-"""Schemas Pydantic para o recurso `documents`.
-
-Convenção do projeto: schemas de response NUNCA são derivados
-diretamente das entidades do domínio. Eles têm forma de saída
-explícita, garantindo que mudanças no domínio não vazem por
-acidente pela API.
-"""
+"""Schemas Pydantic para o recurso `documents`."""
 
 from __future__ import annotations
 
@@ -13,7 +7,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from docuvector.domain.enums import DocumentStatus, FileFormat
+from docuvector.domain.enums import DocumentStatus, EmbeddingProviderName, FileFormat
 
 
 class DocumentResponse(BaseModel):
@@ -37,14 +31,53 @@ class DocumentResponse(BaseModel):
 
 
 class DocumentListResponse(BaseModel):
-    """Envelope da listagem.
+    """Envelope da listagem com `items` e `total`.
 
-    Wrap explícito (em vez de devolver array cru) permite evoluir para
-    paginação no futuro sem quebrar contrato. Padrão recomendado pela
-    OWASP API Security para todas as coleções.
+    Wrap explícito permite paginação no futuro sem quebrar contrato.
     """
 
     model_config = ConfigDict(frozen=True)
 
     items: list[DocumentResponse]
     total: int = Field(ge=0)
+
+
+class DocumentUploadResponse(BaseModel):
+    """Resposta do POST /documents.
+
+    Inclui `was_already_ingested` para distinguir um upload real de
+    cache hit por checksum (dedup). A UX usa isso para informar o
+    usuário que o documento já existia.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    document: DocumentResponse
+    chunks_created: int = Field(ge=0)
+    embedding_provider: EmbeddingProviderName
+    was_already_ingested: bool
+
+
+class EmbeddingProviderOption(BaseModel):
+    """Item da lista de provedores de embedding disponíveis.
+
+    Usado pela UX para popular o select que o usuário usa ao subir um
+    documento. Inclui o nome canônico, o modelo concreto e as dimensões
+    para exibição informativa.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    name: EmbeddingProviderName
+    model: str
+    dimensions: int
+    description: str
+
+
+class EmbeddingProviderListResponse(BaseModel):
+    """Envelope da listagem de provedores disponíveis."""
+
+    model_config = ConfigDict(frozen=True)
+
+    items: list[EmbeddingProviderOption]
+    default: EmbeddingProviderName
