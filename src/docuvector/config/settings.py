@@ -1,8 +1,4 @@
-"""Configurações da aplicação validadas a partir do arquivo .env.
-
-Centraliza todo acesso a variáveis de ambiente em um único ponto tipado.
-Nenhum outro módulo deve ler `os.environ` diretamente.
-"""
+"""Configurações da aplicação validadas a partir do arquivo .env."""
 
 from __future__ import annotations
 
@@ -16,8 +12,6 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class ApplicationEnvironment(str, Enum):
-    """Ambientes de execução suportados."""
-
     DEVELOPMENT = "development"
     TEST = "test"
     PRODUCTION = "production"
@@ -88,14 +82,10 @@ class Settings(BaseSettings):
     )
 
     # =============================================================
-    # Seed de usuários
+    # Bootstrap administrativo
     # =============================================================
     seed_admin_email: str = Field(alias="SEED_ADMIN_EMAIL")
-    seed_admin_password: SecretStr = Field(min_length=8, alias="SEED_ADMIN_PASSWORD")
-    seed_user1_email: str = Field(alias="SEED_USER1_EMAIL")
-    seed_user1_password: SecretStr = Field(min_length=8, alias="SEED_USER1_PASSWORD")
-    seed_user2_email: str = Field(alias="SEED_USER2_EMAIL")
-    seed_user2_password: SecretStr = Field(min_length=8, alias="SEED_USER2_PASSWORD")
+    seed_admin_password: SecretStr = Field(min_length=12, alias="SEED_ADMIN_PASSWORD")
 
     # =============================================================
     # Embedder OpenAI
@@ -164,15 +154,41 @@ class Settings(BaseSettings):
         ge=1,
         alias="LOGIN_RATE_LIMIT_PER_MINUTE",
     )
+    register_rate_limit_per_minute: int = Field(
+        default=5,
+        ge=1,
+        alias="REGISTER_RATE_LIMIT_PER_MINUTE",
+        description="Limite de tentativas de auto-cadastro por IP/minuto.",
+    )
+
+    # Piso de latência mínima do POST /register (em segundos). Precisa
+    # ser MAIOR que o tempo de um bcrypt no cost de produção para o
+    # timing equalizer fazer efeito.
+    register_min_latency_seconds: float = Field(
+        default=0.6,
+        ge=0.0,
+        le=5.0,
+        alias="REGISTER_MIN_LATENCY_SECONDS",
+        description=(
+            "Piso de latência do /register para anti-enumeração. Deve ser "
+            ">= ao tempo de 1 bcrypt no cost de produção (~250-400ms)."
+        ),
+    )
+
+    # =============================================================
+    # Política de senha (NIST SP 800-63B)
+    # =============================================================
+    password_min_length: int = Field(
+        default=12,
+        ge=8,
+        le=128,
+        alias="PASSWORD_MIN_LENGTH",
+        description="Comprimento mínimo da senha (NIST SP 800-63B).",
+    )
 
     # =============================================================
     # Hashing de senha
     # =============================================================
-    # Cost factor do bcrypt. Quanto maior, mais lento e mais resistente
-    # a brute force. OWASP recomenda >= 12 para produção em 2026.
-    # Em desenvolvimento/demo usamos um valor menor para responsividade
-    # em hardware de notebook, sem comprometer a segurança real do sistema
-    # (ver validador `calibrate_bcrypt_rounds_for_environment`).
     bcrypt_rounds: int | None = Field(
         default=None,
         ge=4,
@@ -185,17 +201,27 @@ class Settings(BaseSettings):
     )
 
     # =============================================================
+    # Rede / proxies confiáveis
+    # =============================================================
+    # Lista CSV de IPs que podem fornecer X-Forwarded-For / X-Real-IP.
+    # Quando a requisição NÃO vem desses peers, esses headers são
+    # ignorados e o IP usado é o peer TCP direto. Defesa contra header
+    # spoofing por clientes externos.
+    trusted_proxy_ips: str = Field(
+        default="",
+        alias="TRUSTED_PROXY_IPS",
+        description=(
+            "Lista CSV de IPs de proxies confiáveis (ex.: '10.0.0.1,10.0.0.2'). "
+            "Vazia em dev/local; preencher em produção atrás de reverse proxy."
+        ),
+    )
+
+    # =============================================================
     # Validators
     # =============================================================
     @field_validator("app_env", mode="before")
     @classmethod
     def normalize_application_environment_aliases(cls, candidate_value: object) -> object:
-        """Aceita aliases comuns para o ambiente de execução.
-
-        Reduz fricção operacional: muitos desenvolvedores escrevem `testing`
-        (Django/Rails-like) ou `dev`/`prod` no .env. Normalizamos para os
-        valores canônicos do enum antes da validação.
-        """
         if not isinstance(candidate_value, str):
             return candidate_value
 
@@ -213,7 +239,6 @@ class Settings(BaseSettings):
     @field_validator("database_url")
     @classmethod
     def database_url_must_use_psycopg(cls, candidate_url: str) -> str:
-        """Garante que o driver SQLAlchemy seja o `psycopg` v3."""
         if not candidate_url.startswith("postgresql+psycopg://"):
             raise ValueError(
                 "DATABASE_URL deve usar o driver 'postgresql+psycopg://' (psycopg v3). "
@@ -223,7 +248,6 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def chunk_overlap_must_be_less_than_chunk_size(self) -> Settings:
-        """RGN-06: o overlap entre chunks deve ser estritamente menor que o tamanho do chunk."""
         if self.rag_chunk_overlap >= self.rag_chunk_size:
             raise ValueError(
                 f"RAG_CHUNK_OVERLAP ({self.rag_chunk_overlap}) deve ser menor que "
@@ -236,18 +260,18 @@ class Settings(BaseSettings):
     # =============================================================
     @property
     def effective_bcrypt_rounds(self) -> int:
-        """Cost do bcrypt resolvido por ambiente.
-
-        Precedência:
-        1. Valor explícito em BCRYPT_ROUNDS (se definido no .env).
-        2. Produção: 12 (OWASP Password Storage Cheat Sheet 2026).
-        3. Desenvolvimento/teste: 10 (responsivo em hardware de demo,
-           ainda dentro da faixa segura; cada incremento dobra o custo,
-           então 10 é ~4x mais rápido que 12).
-        """
         if self.bcrypt_rounds is not None:
             return self.bcrypt_rounds
         return 12 if self.is_production else 10
+
+    @property
+    def trusted_proxy_ip_set(self) -> frozenset[str]:
+        """Conjunto normalizado de IPs confiáveis, sem espaços ou vazios."""
+        if not self.trusted_proxy_ips:
+            return frozenset()
+        return frozenset(
+            entry.strip() for entry in self.trusted_proxy_ips.split(",") if entry.strip()
+        )
 
     @property
     def is_development(self) -> bool:
@@ -264,9 +288,4 @@ class Settings(BaseSettings):
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
-    """Retorna a instância singleton de Settings.
-
-    Usar exclusivamente esta função para acessar configurações em toda
-    a aplicação. O cache garante uma única leitura do `.env` por processo.
-    """
     return Settings()

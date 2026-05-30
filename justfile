@@ -159,9 +159,11 @@ serve:
 ## Bootstrap operacional
 ## =============================================================
 
-## Cria os 3 usuários iniciais (admin + user1 + user2) a partir do .env
-seed:
-    uv run python -m scripts.seed_users
+## Cria APENAS o admin de bootstrap a partir do .env (idempotente).
+## Demais usuários nascem via POST /api/v1/auth/register (público) ou
+## via POST /api/v1/admin/users (admin-only).
+seed-admin:
+    uv run python -m scripts.seed_admin
 
 ## =============================================================
 ## Migrations Alembic

@@ -9,6 +9,9 @@ from docuvector.domain.interfaces.embedding_provider import (
 )
 from docuvector.domain.interfaces.llm_client import LlmClient, LlmCompletion
 from docuvector.domain.interfaces.password_hasher import PasswordHasher
+from docuvector.domain.interfaces.password_policy_validator import (
+    PasswordPolicyValidator,
+)
 from docuvector.domain.interfaces.text_splitter import TextSplitter
 from docuvector.domain.interfaces.token_service import TokenPayload, TokenService
 from docuvector.domain.interfaces.user_repository import UserRepository
@@ -24,6 +27,7 @@ __all__ = [
     "LlmClient",
     "LlmCompletion",
     "PasswordHasher",
+    "PasswordPolicyValidator",
     "TextSplitter",
     "TokenPayload",
     "TokenService",

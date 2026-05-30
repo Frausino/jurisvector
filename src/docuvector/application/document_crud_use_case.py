@@ -109,7 +109,7 @@ class DocumentCrudUseCase:
         self._documents.delete_for_owner(owner_id, document_id)
         self._audit.append(
             AuditEvent(
-                user_id=owner_id,
+                actor_user_id=owner_id,
                 action=AuditAction.DOCUMENT_DELETED,
                 status=AuditStatus.SUCCESS,
                 resource_type=_RESOURCE_TYPE,
@@ -139,7 +139,7 @@ class DocumentCrudUseCase:
         """
         self._audit.append(
             AuditEvent(
-                user_id=owner_id,
+                actor_user_id=owner_id,
                 action=AuditAction.ACCESS_DENIED,
                 status=AuditStatus.FAILURE,
                 resource_type=_RESOURCE_TYPE,

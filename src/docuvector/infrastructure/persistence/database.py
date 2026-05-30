@@ -75,13 +75,18 @@ def session_scope() -> Iterator[Session]:
 def provide_session() -> Iterator[Session]:
     """Dependency FastAPI: injeta uma sessão por requisição.
 
-    Uso no router:
-
-        def endpoint(db_session: Annotated[Session, Depends(provide_session)]):
-            ...
+    Commit automático ao final da requisição bem-sucedida.
+    Rollback automático em caso de exceção.
     """
     session = get_session_factory()()
+
     try:
         yield session
+        session.commit()
+
+    except Exception:
+        session.rollback()
+        raise
+
     finally:
         session.close()

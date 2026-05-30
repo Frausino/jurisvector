@@ -1,9 +1,21 @@
 """Implementação de hashing de senha com bcrypt (via passlib).
 
-Decisão: bcrypt com cost 12 atende OWASP Password Storage Cheat Sheet
-para 2026. Argon2id seria superior em hardware moderno, mas bcrypt
-ainda é o padrão de fato e tem suporte nativo do passlib sem libs C
-adicionais.
+Decisão arquitetural CRÍTICA: o esquema é `bcrypt_sha256`, não `bcrypt`
+puro. Diferença:
+
+- `bcrypt` puro TRUNCA silenciosamente em 72 bytes. Duas senhas que
+  coincidem nos primeiros 72 bytes (comum em passphrases UTF-8 com
+  acentos, onde 1 char pode ser 2-4 bytes) geram o MESMO hash. Vetor
+  conhecido de colisão prática.
+
+- `bcrypt_sha256` (recomendação OWASP) aplica SHA-256 sobre a senha
+  ANTES do bcrypt: a entrada para o bcrypt vira sempre 32 bytes,
+  cabendo confortavelmente nos 72 do limite, e qualquer mudança na
+  senha original produz hash diferente.
+
+A constante de comprimento mínimo NÃO existe aqui: única fonte de
+verdade é o `NistPasswordPolicyValidator`, executado ANTES do hash
+no fluxo de use case. Duplicar criava risco de divergência.
 """
 
 from __future__ import annotations
@@ -12,32 +24,31 @@ from passlib.context import CryptContext
 
 from docuvector.domain.exceptions import ValidationError
 
-_MIN_PASSWORD_LENGTH = 8
 _DEFAULT_BCRYPT_ROUNDS = 12
 
 
 class BcryptPasswordHasher:
-    """Hashing one-way de senhas com bcrypt e cost factor 12.
+    """Hashing one-way de senhas com `bcrypt_sha256` (pré-hash SHA-256).
 
     Satisfaz estruturalmente `domain.interfaces.PasswordHasher`.
     """
 
     def __init__(self, rounds: int = _DEFAULT_BCRYPT_ROUNDS) -> None:
         self._crypt_context = CryptContext(
-            schemes=["bcrypt"],
+            schemes=["bcrypt_sha256"],
             deprecated="auto",
-            bcrypt__rounds=rounds,
+            bcrypt_sha256__rounds=rounds,
         )
 
     def hash(self, plain_password: str) -> str:
-        """Retorna hash bcrypt no formato `$2b$<rounds>$<salt><hash>`.
+        """Retorna hash no formato `$bcrypt-sha256$<params>$<salt>$<hash>`.
 
-        Levanta `ValidationError` se a senha for vazia ou abaixo do mínimo.
+        Levanta `ValidationError` apenas se a senha for vazia. A política
+        de comprimento é responsabilidade do `PasswordPolicyValidator`
+        chamado antes desta função no fluxo do use case.
         """
-        if not plain_password or len(plain_password) < _MIN_PASSWORD_LENGTH:
-            raise ValidationError(
-                f"A senha deve ter no mínimo {_MIN_PASSWORD_LENGTH} caracteres.",
-            )
+        if not plain_password:
+            raise ValidationError("A senha não pode ser vazia.")
         return self._crypt_context.hash(plain_password)
 
     def verify(self, plain_password: str, hashed_password: str) -> bool:

@@ -1,41 +1,170 @@
-"""Endpoints REST do recurso `documents`.
-
-Cobertura desta sprint (Bloco 1):
-- `GET  /api/v1/documents`         listagem do dono autenticado
-- `GET  /api/v1/documents/{id}`    detalhe do dono autenticado
-- `DELETE /api/v1/documents/{id}`  exclusão do dono autenticado
-
-`POST /api/v1/documents` (upload) será adicionado na Sprint 3 quando
-o `IngestionUseCase` existir; criar o endpoint agora forçaria stub
-que não vale a pena.
-"""
+"""Endpoints REST do recurso `documents`."""
 
 from __future__ import annotations
 
 from uuid import UUID
 
-from fastapi import APIRouter, Request, status
+from fastapi import APIRouter, File, Form, Request, UploadFile, status
 
 from docuvector.api.deps import (
     ClientIpDependency,
     CurrentTokenDependency,
     DocumentCrudUseCaseDependency,
+    IngestionUseCaseDependency,
+    SettingsDependency,
 )
-from docuvector.api.schemas.documents import DocumentListResponse, DocumentResponse
+from docuvector.api.schemas.documents import (
+    DocumentListResponse,
+    DocumentResponse,
+    DocumentUploadResponse,
+    EmbeddingProviderListResponse,
+    EmbeddingProviderOption,
+)
+from docuvector.domain.enums import EmbeddingProviderName
+from docuvector.domain.exceptions import DocumentTooLargeError
+from docuvector.infrastructure.embeddings.factory import (
+    list_available_providers,
+    resolve_embedder,
+)
 
 router = APIRouter(prefix="/api/v1/documents", tags=["documents"])
 
+# Lê o upload em pedaços de 1 MB. Equilibra throughput (poucas system
+# calls) com memória (pico controlado mesmo em paralelo).
+_UPLOAD_CHUNK_SIZE_BYTES = 1024 * 1024
 
+
+# =============================================================
+# POST /api/v1/documents (upload + ingestão completa)
+# =============================================================
+@router.post(
+    "",
+    response_model=DocumentUploadResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Upload e ingestão de documento",
+    description=(
+        "Upload multipart com pipeline completo: extract → split → embed → store. "
+        "O usuário escolhe o `embedding_provider`. Documento duplicado (mesmo "
+        "SHA-256 do dono) é detectado e retornado sem reprocessar.\n\n"
+        "O corpo é lido em chunks de 1 MB; uploads que excedem o limite "
+        "configurado são abortados ANTES de bufferizar tudo na memória."
+    ),
+    responses={
+        201: {"description": "Documento ingerido com sucesso."},
+        400: {"description": "Arquivo inválido ou formato não suportado."},
+        413: {"description": "Arquivo excede o tamanho máximo."},
+        422: {"description": "Provedor de embedding inválido."},
+    },
+)
+async def upload_document(
+    request: Request,
+    token_payload: CurrentTokenDependency,
+    client_ip: ClientIpDependency,
+    ingestion_use_case: IngestionUseCaseDependency,
+    settings: SettingsDependency,
+    file: UploadFile = File(..., description="Arquivo PDF, TXT ou MD."),
+    embedding_provider: EmbeddingProviderName = Form(
+        default=EmbeddingProviderName.SENTENCE_TRANSFORMERS,
+        description="Provedor de embeddings escolhido pelo usuário.",
+    ),
+) -> DocumentUploadResponse:
+    content = await _read_upload_with_size_limit(
+        upload_file=file,
+        size_limit_bytes=settings.upload_max_bytes,
+    )
+
+    embedder = resolve_embedder(embedding_provider)
+    ingestion_result = ingestion_use_case.ingest(
+        owner_id=token_payload.user_id,
+        filename=file.filename or "documento",
+        content=content,
+        embedding_provider=embedder,
+        client_ip=client_ip,
+        user_agent=request.headers.get("user-agent"),
+    )
+
+    return DocumentUploadResponse(
+        document=DocumentResponse.model_validate(ingestion_result.document),
+        chunks_created=ingestion_result.chunks_created,
+        embedding_provider=ingestion_result.embedding_provider,
+        was_already_ingested=ingestion_result.was_already_ingested,
+    )
+
+
+async def _read_upload_with_size_limit(
+    upload_file: UploadFile,
+    size_limit_bytes: int,
+) -> bytes:
+    """Lê o `UploadFile` em chunks abortando em quanto exceder o limite.
+
+    Defesa contra OOM: um cliente malicioso pode enviar gigabytes; se
+    lermos `await file.read()` direto, alocamos tudo na heap antes de
+    checar o tamanho. Aqui acumulamos em chunks e fechamos cedo se
+    detectarmos excesso.
+    """
+    accumulated_bytes = bytearray()
+    while True:
+        chunk = await upload_file.read(_UPLOAD_CHUNK_SIZE_BYTES)
+        if not chunk:
+            break
+
+        accumulated_bytes.extend(chunk)
+        if len(accumulated_bytes) > size_limit_bytes:
+            await upload_file.close()
+            raise DocumentTooLargeError(f"Arquivo excede o limite de {size_limit_bytes} bytes.")
+    return bytes(accumulated_bytes)
+
+
+# =============================================================
+# GET /api/v1/documents/providers (lista para UX)
+# =============================================================
+@router.get(
+    "/providers",
+    response_model=EmbeddingProviderListResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Listar provedores de embedding disponíveis",
+)
+def list_embedding_providers(
+    _token_payload: CurrentTokenDependency,
+    settings: SettingsDependency,
+) -> EmbeddingProviderListResponse:
+    available = list_available_providers(settings)
+
+    items: list[EmbeddingProviderOption] = []
+    for provider_name in available:
+        if provider_name is EmbeddingProviderName.SENTENCE_TRANSFORMERS:
+            items.append(
+                EmbeddingProviderOption(
+                    name=provider_name,
+                    model=settings.sentence_transformers_model,
+                    dimensions=settings.sentence_transformers_dimensions,
+                    description="Local, multilíngue, sem custo por chamada.",
+                )
+            )
+        elif provider_name is EmbeddingProviderName.OPENAI:
+            items.append(
+                EmbeddingProviderOption(
+                    name=provider_name,
+                    model=settings.openai_embedding_model,
+                    dimensions=settings.openai_embedding_dimensions,
+                    description="Qualidade superior; consome cota da OpenAI.",
+                )
+            )
+
+    return EmbeddingProviderListResponse(
+        items=items,
+        default=EmbeddingProviderName.SENTENCE_TRANSFORMERS,
+    )
+
+
+# =============================================================
+# GET /api/v1/documents
+# =============================================================
 @router.get(
     "",
     response_model=DocumentListResponse,
     status_code=status.HTTP_200_OK,
     summary="Listar documentos do usuário autenticado",
-    description=(
-        "Retorna os documentos pertencentes ao dono extraído do token. "
-        "Não há vazamento entre usuários: a query no banco já filtra "
-        "por owner_id."
-    ),
 )
 def list_documents(
     token_payload: CurrentTokenDependency,
@@ -48,16 +177,14 @@ def list_documents(
     )
 
 
+# =============================================================
+# GET /api/v1/documents/{id}
+# =============================================================
 @router.get(
     "/{document_id}",
     response_model=DocumentResponse,
     status_code=status.HTTP_200_OK,
     summary="Detalhar documento do usuário autenticado",
-    description=(
-        "Retorna o documento se pertencer ao dono. Documento de outro "
-        "dono devolve 404 (não 403), evitando enumeração de "
-        "identificadores entre tenants."
-    ),
     responses={404: {"description": "Documento não encontrado."}},
 )
 def get_document(
@@ -76,14 +203,13 @@ def get_document(
     return DocumentResponse.model_validate(document)
 
 
+# =============================================================
+# DELETE /api/v1/documents/{id}
+# =============================================================
 @router.delete(
     "/{document_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Excluir documento do usuário autenticado",
-    description=(
-        "Apaga o documento e seus chunks (CASCADE) se pertencer ao "
-        "dono. Mesma política de 404 para documento alheio."
-    ),
     responses={404: {"description": "Documento não encontrado."}},
 )
 def delete_document(
