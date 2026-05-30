@@ -8,6 +8,9 @@ git status
 uv sync --extra api --extra dev
 uv run pre-commit install
 ```
+### Rodar tudo que o pre-commit executaria
+
+uv run pre-commit run --all-files
 
 ### Subir o ambiente
 ```bash
