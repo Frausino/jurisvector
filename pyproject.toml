@@ -70,6 +70,9 @@ api = [
     "slowapi>=0.1.9,<0.2",
     "jinja2>=3.1,<4.0",
 ]
+
+
+[dependency-groups]
 dev = [
     # Testes
     "pytest>=9.0.3,<10.0",
@@ -95,13 +98,9 @@ dev = [
     "pre-commit>=3.8,<5.0",
 ]
 
-# =============================================================
-# Scripts CLI expostos pelo pacote
-#
-# `seed-admin` substituiu o antigo `seed-users`. Apenas o admin de
-# bootstrap é seedado via .env; demais usuários nascem via API
-# (POST /api/v1/auth/register público ou /api/v1/admin/users).
-# =============================================================
+[tool.uv]
+default-groups = ["dev"]
+
 [project.scripts]
 seed-admin = "scripts.seed_admin:main"
 
