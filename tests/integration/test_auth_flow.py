@@ -11,6 +11,8 @@ Pré-requisitos:
 
 from __future__ import annotations
 
+import os
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import text
@@ -34,7 +36,7 @@ def test_user_can_login_with_correct_credentials(
     """Login com credenciais corretas devolve JWT bearer e expira_in."""
     login_response = client.post(
         "/api/v1/auth/login",
-        json=_login_payload(regular_user_one.email, "user1-pass-123"),
+        json=_login_payload(regular_user_one.email, os.environ["TEST_USER_ONE_PASSWORD"]),
     )
 
     assert login_response.status_code == 200
@@ -116,7 +118,7 @@ def test_successful_login_is_recorded_in_audit_log(
     """Login bem-sucedido também gera evento de auditoria."""
     client.post(
         "/api/v1/auth/login",
-        json=_login_payload(regular_user_one.email, "user1-pass-123"),
+        json=_login_payload(regular_user_one.email, os.environ["TEST_USER_ONE_PASSWORD"]),
     )
 
     session_factory = get_session_factory()
@@ -164,7 +166,7 @@ def test_me_endpoint_returns_authenticated_user(
     """GET /me com token válido retorna dados do usuário sem expor password_hash."""
     login_response = client.post(
         "/api/v1/auth/login",
-        json=_login_payload(regular_user_one.email, "user1-pass-123"),
+        json=_login_payload(regular_user_one.email, os.environ["TEST_USER_ONE_PASSWORD"]),
     )
     access_token = login_response.json()["access_token"]
 
@@ -198,7 +200,7 @@ def test_me_endpoint_with_tampered_token_returns_401(
     """Token adulterado deve ser rejeitado mesmo que estruturalmente válido."""
     login_response = client.post(
         "/api/v1/auth/login",
-        json=_login_payload(regular_user_one.email, "user1-pass-123"),
+        json=_login_payload(regular_user_one.email, os.environ["TEST_USER_ONE_PASSWORD"]),
     )
     valid_token = login_response.json()["access_token"]
     tampered_token = valid_token[:-4] + "AAAA"

@@ -1,8 +1,7 @@
 """Entrypoint da aplicação FastAPI.
 
 Usa o padrão factory (`create_app`) para permitir múltiplas instâncias
-em testes e injeção controlada de dependências. A instância exportada
-no nível do módulo (`app`) é a usada por `uvicorn docuvector.main:app`.
+em testes e injeção controlada de dependências.
 """
 
 from __future__ import annotations
@@ -16,6 +15,7 @@ from fastapi.responses import JSONResponse
 from slowapi.errors import RateLimitExceeded
 
 from docuvector import __version__
+from docuvector.api.routers import admin_users as admin_users_router
 from docuvector.api.routers import auth as auth_router
 from docuvector.api.routers import documents as documents_router
 from docuvector.api.routers import health
@@ -23,6 +23,7 @@ from docuvector.config.settings import Settings, get_settings
 from docuvector.domain.exceptions import (
     AuthenticationError,
     AuthorizationError,
+    DuplicateResourceError,
     ResourceNotFoundError,
     ValidationError,
 )
@@ -44,9 +45,7 @@ async def application_lifespan(app: FastAPI) -> AsyncIterator[None]:
         environment=settings.app_env.value,
         port=settings.app_port,
     )
-
     yield
-
     logger.info("application_shutdown")
 
 
@@ -67,14 +66,12 @@ def create_app() -> FastAPI:
         lifespan=application_lifespan,
     )
 
-    # Rate limiter (slowapi) registrado globalmente.
     fastapi_app.state.limiter = auth_router.limiter
     fastapi_app.add_exception_handler(
         RateLimitExceeded,
         _rate_limit_handler,  # type: ignore[arg-type]
     )
 
-    # Handlers globais traduzindo exceções de domínio para HTTP.
     fastapi_app.add_exception_handler(
         AuthenticationError,
         _authentication_error_handler,  # type: ignore[arg-type]
@@ -91,8 +88,11 @@ def create_app() -> FastAPI:
         ValidationError,
         _validation_error_handler,  # type: ignore[arg-type]
     )
+    fastapi_app.add_exception_handler(
+        DuplicateResourceError,
+        _duplicate_resource_handler,  # type: ignore[arg-type]
+    )
 
-    # CORS apenas para o próprio front local em desenvolvimento.
     if settings.is_development:
         fastapi_app.add_middleware(
             CORSMiddleware,
@@ -105,6 +105,7 @@ def create_app() -> FastAPI:
     fastapi_app.include_router(health.router)
     fastapi_app.include_router(auth_router.router)
     fastapi_app.include_router(documents_router.router)
+    fastapi_app.include_router(admin_users_router.router)
 
     return fastapi_app
 
@@ -139,6 +140,12 @@ async def _not_found_handler(_request: Request, exc: ResourceNotFoundError) -> J
 
 async def _validation_error_handler(_request: Request, exc: ValidationError) -> JSONResponse:
     return _build_error_response(status.HTTP_422_UNPROCESSABLE_ENTITY, "validation_error", str(exc))
+
+
+async def _duplicate_resource_handler(
+    _request: Request, exc: DuplicateResourceError
+) -> JSONResponse:
+    return _build_error_response(status.HTTP_409_CONFLICT, "duplicate_resource", str(exc))
 
 
 async def _rate_limit_handler(_request: Request, exc: RateLimitExceeded) -> JSONResponse:

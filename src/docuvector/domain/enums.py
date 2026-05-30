@@ -13,15 +13,15 @@ class UserRole(str, Enum):
 
 
 class AuditAction(str, Enum):
-    """Ações sensíveis registradas no log de auditoria.
-
-    Centralizar como enum evita strings mágicas espalhadas pelo código
-    e facilita correlação entre eventos no painel administrativo.
-    """
+    """Ações sensíveis registradas no log de auditoria."""
 
     LOGIN_SUCCESS = "login_success"
     LOGIN_FAILED = "login_failed"
     USER_SEEDED = "user_seeded"
+    USER_REGISTERED = "user_registered"
+    USER_CREATED_BY_ADMIN = "user_created_by_admin"
+    USER_DELETED = "user_deleted"
+    USER_ROLE_CHANGED = "user_role_changed"
     ACCESS_DENIED = "access_denied"
     DOCUMENT_UPLOADED = "document_uploaded"
     DOCUMENT_DELETED = "document_deleted"
@@ -30,11 +30,7 @@ class AuditAction(str, Enum):
 
 
 class AuditStatus(str, Enum):
-    """Resultado de uma ação auditada.
-
-    `forbidden` diferencia tentativas de acesso indevido (que retornam
-    HTTP 404 ao cliente para mascarar existência) de falhas legítimas.
-    """
+    """Resultado de uma ação auditada."""
 
     SUCCESS = "success"
     FAILURE = "failure"
@@ -42,13 +38,7 @@ class AuditStatus(str, Enum):
 
 
 class FileFormat(str, Enum):
-    """Formatos aceitos para ingestão de documentos.
-
-    Extensão e content-type devem ser validados em conjunto durante o
-    upload; apenas a extensão é fonte da verdade aqui (string lowercase
-    sem ponto), porque a detecção de MIME real ocorre na camada de
-    infraestrutura (não no domínio).
-    """
+    """Formatos aceitos para ingestão de documentos."""
 
     PDF = "pdf"
     TXT = "txt"
@@ -58,18 +48,11 @@ class FileFormat(str, Enum):
 class DocumentStatus(str, Enum):
     """Ciclo de vida de um documento no pipeline RAG.
 
-    Transições válidas (não modeladas como máquina de estado formal,
-    mas documentadas aqui para o use case respeitar):
-
-        UPLOADED   -> EXTRACTING  -> EXTRACTED
-                                  -> FAILED
-        EXTRACTED  -> CHUNKING    -> CHUNKED
-                                  -> FAILED
-        CHUNKED    -> EMBEDDING   -> EMBEDDED
-                                  -> FAILED
-        FAILED     -> (terminal; reupload exige novo documento)
-
-    Documento em EMBEDDED é o único elegível para retrieval.
+    Transições válidas:
+        UPLOADED   -> EXTRACTING  -> EXTRACTED   -> FAILED
+        EXTRACTED  -> CHUNKING    -> CHUNKED     -> FAILED
+        CHUNKED    -> EMBEDDING   -> EMBEDDED    -> FAILED
+        FAILED     -> (terminal)
     """
 
     UPLOADED = "uploaded"
@@ -83,11 +66,7 @@ class DocumentStatus(str, Enum):
 
 
 class EmbeddingProviderName(str, Enum):
-    """Provedores de embedding suportados.
-
-    Persistir o nome do provedor + modelo + dimensões em cada chunk é
-    requisito para a Sprint 4 (benchmark de compressão entre provedores).
-    """
+    """Provedores de embedding suportados."""
 
     OPENAI = "openai"
     SENTENCE_TRANSFORMERS = "sentence_transformers"

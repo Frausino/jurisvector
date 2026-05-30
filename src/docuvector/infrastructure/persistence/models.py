@@ -259,7 +259,13 @@ class DocumentChunkModel(Base):
 # audit_logs
 # =============================================================
 class AuditLogModel(Base):
-    """Tabela `audit_logs`. Append-only. Persistência da entidade `AuditEvent`."""
+    """Tabela `audit_logs`. Ledger imutável de eventos forenses.
+
+    NÃO depende de `users` por foreign key: `actor_user_id` é um UUID
+    histórico que sobrevive à deleção do usuário. Snapshots de
+    `actor_email` e `actor_role` permitem entender quem fez o quê sem
+    JOIN, mesmo após mudanças no usuário original.
+    """
 
     __tablename__ = "audit_logs"
 
@@ -268,11 +274,21 @@ class AuditLogModel(Base):
         primary_key=True,
         default=uuid4,
     )
-    user_id: Mapped[UUID | None] = mapped_column(
+    actor_user_id: Mapped[UUID | None] = mapped_column(
         PG_UUID(as_uuid=True),
-        ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
+    )
+    actor_email: Mapped[str | None] = mapped_column(Text, nullable=True)
+    actor_role: Mapped[UserRole | None] = mapped_column(
+        SqlEnum(
+            UserRole,
+            name="user_role",
+            values_callable=_enum_values,
+            native_enum=True,
+            create_type=False,
+        ),
+        nullable=True,
     )
     action: Mapped[AuditAction] = mapped_column(
         SqlEnum(
@@ -297,6 +313,11 @@ class AuditLogModel(Base):
     resource_id: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True)
     ip_address: Mapped[str | None] = mapped_column(INET, nullable=True)
     user_agent: Mapped[str | None] = mapped_column(Text, nullable=True)
+    correlation_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        nullable=True,
+        index=True,
+    )
     event_metadata: Mapped[dict[str, object] | None] = mapped_column(
         "metadata",
         JSON,

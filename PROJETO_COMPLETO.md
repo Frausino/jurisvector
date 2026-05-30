@@ -944,6 +944,40 @@ Permite ao desenvolvedor reproduzir o CI inteiro antes do push. Isso é prática
 
 **Definition of Done:** Upload de contrato, pergunta sobre cláusula, resposta com fontes em ≤ 3 segundos.
 
+Sim, totalmente possível. Inclusive alinha perfeitamente com o diferencial declarado da Sprint 4 (compressão observável). É exatamente o tipo de feature que diferencia um TCC nota alta de um nota média.
+O que dá para mostrar (todos viáveis)
+MétricaDe onde vemCusto de implementarLatência por provider (ms p50/p95)audit_logs.metadata.latency_ms (já gravado no Bloco 5/AnswerUseCase)Trivial: query SQL agregadaTokens consumidos / custo USD acumuladoaudit_logs.metadata.tokens_used + cost_usdTrivial: SUM no SQLTamanho vetor original vs comprimidodocuments.original_dimension e documents.compressed_dimension (já têm coluna na migration 0001!)Trivial: cálculo no frontBytes em disco antes/depoisoriginal_dim × 4 bytes × n_chunks vs compressed_dim × 4 bytes × n_chunksTrivial: aritméticaEstimativa em R$ no Pinecone/Qdrant CloudTabela fixa de preços × bytes economizadosTrivial: tabela hardcoded no frontRetenção semântica (qualidade)documents.semantic_retention (já tem coluna!)Médio: precisa benchmark da Sprint 4
+Por que é eficiente
+
+Você JÁ tem os campos no schema. Olha models.py: compression_method, original_dimension, compressed_dimension, semantic_retention, ingest_time_ms estão lá nullable, esperando a Sprint 4 preencher.
+Audit log JÁ grava o que precisa. O IngestionUseCase (Bloco 3) registra embedding_provider, embedding_dimensions, chunks_created. O AnswerUseCase (Bloco 4) vai gravar latency_ms e cost_usd. Você só agrega.
+Cálculo de R$ economizado é aritmética simples. Não exige ML, não exige análise estatística complexa. Tabela de preços × delta de bytes.
+Audiência adora. Banca jurídica/acadêmica entende "economia em reais" muito melhor que "redução de dimensionalidade via PCA".
+
+O que adicionar no roadmap (proposta)
+Sprint 4 (★ diferencial) — adiciona:
+
+Endpoint GET /api/v1/metrics/dashboard que agrega tudo
+Templates do dashboard em Jinja2 (já planejado para Sprint 5, mas a aba de métricas vira parte da Sprint 4)
+
+Sprint 5 (frontend Jinja2) — adiciona:
+
+Aba "Indicadores" no menu
+Cards visuais: latência média, custo acumulado, bytes economizados, R$ projetados
+Comparativo OpenAI vs E5 lado a lado (gráfico de barras simples com HTMX + CSS, sem Chart.js)
+
+Trabalho extra estimado
+
+2-3h para o endpoint de métricas (Sprint 4)
+3-4h para a aba na UX (Sprint 5)
+Total: ~6h distribuídos em 2 sprints já planejadas
+
+Frase para a banca
+
+"O sistema mede o próprio funcionamento. A aba Indicadores mostra latência por provedor, custo acumulado em USD, e — o ponto pedagógico mais relevante — a economia em reais que a compressão de embeddings traz se o sistema for migrado para Pinecone ou Qdrant Cloud. O aluno que usa o sistema vê o impacto financeiro de uma decisão técnica, não só lê sobre ele."
+
+Recomendação: anoto isso como Bloco 5 da Sprint 4 (depois dos 4 compressores e benchmarks que já estavam planejados). Quer que eu adicione formalmente ao roadmap no documento AVALIACAO_ESTADO_VS_PLANO.md?
+
 ### Sprint 4 — Compressão e benchmarks (Dias 8-9) ★ DIFERENCIAL
 
 **Dia 8 — Compressores:**

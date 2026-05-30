@@ -95,8 +95,15 @@ dev = [
     "pre-commit>=3.8,<5.0",
 ]
 
+# =============================================================
+# Scripts CLI expostos pelo pacote
+#
+# `seed-admin` substituiu o antigo `seed-users`. Apenas o admin de
+# bootstrap é seedado via .env; demais usuários nascem via API
+# (POST /api/v1/auth/register público ou /api/v1/admin/users).
+# =============================================================
 [project.scripts]
-seed-users = "docuvector.scripts.seed_users:main"
+seed-admin = "scripts.seed_admin:main"
 
 [project.urls]
 Repository = "https://github.com/Frausino/docuvector-lite"
@@ -148,6 +155,7 @@ ignore = [
 # variáveis de ambiente já populadas. Ver decisões arq. (2) no conftest.
 "tests/conftest.py" = ["S105", "S106", "PLR2004", "PLR0915", "PLC0415"]
 "scripts/**" = ["T201"]  # print() permitido em scripts CLI
+"src/docuvector/api/routers/*.py" = ["B008"]
 
 [tool.ruff.lint.mccabe]
 max-complexity = 10

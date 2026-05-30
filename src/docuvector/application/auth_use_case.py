@@ -159,7 +159,9 @@ class AuthUseCase:
                 action=AuditAction.LOGIN_SUCCESS,
                 status=AuditStatus.SUCCESS,
                 resource_type="user",
-                user_id=user.id,
+                actor_user_id=user.id,
+                actor_email=user.email,
+                actor_role=user.role,
                 resource_id=user.id,
                 ip_address=client_ip,
                 user_agent=user_agent,
@@ -180,7 +182,7 @@ class AuthUseCase:
                 action=AuditAction.LOGIN_FAILED,
                 status=AuditStatus.FAILURE,
                 resource_type="user",
-                user_id=user_id,  # type: ignore[arg-type]
+                actor_user_id=user_id,  # type: ignore[arg-type]
                 ip_address=client_ip,
                 user_agent=user_agent,
                 metadata={"attempted_email": attempted_email, "reason": reason},
