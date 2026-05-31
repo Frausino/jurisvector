@@ -17,6 +17,7 @@ mantida em memória pelo factory singleton no `composition root`.
 from __future__ import annotations
 
 from collections.abc import Sequence
+from importlib import import_module
 from typing import TYPE_CHECKING
 
 from docuvector.domain.enums import EmbeddingProviderName
@@ -79,16 +80,18 @@ class SentenceTransformersEmbedder:
         """Carrega o modelo na primeira chamada e reaproveita depois."""
         if self._model is None:
             try:
-                from sentence_transformers import SentenceTransformer
+                sentence_transformers_module = import_module("sentence_transformers")
+                sentence_transformer_class = sentence_transformers_module.SentenceTransformer
             except ImportError as missing_dependency:
                 raise EmbeddingGenerationError(
                     "sentence-transformers não está instalado."
                 ) from missing_dependency
 
-            self._model = SentenceTransformer(
+            self._model = sentence_transformer_class(
                 self._model_name,
                 cache_folder=self._cache_folder,
             )
+
         return self._model
 
     def _encode_single(self, text: str) -> EmbeddingVector:

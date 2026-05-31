@@ -52,6 +52,16 @@ lint:
 lint-fix:
     uv run ruff check --fix src tests
 
+## Corrige lint, organiza imports e aplica formatação
+fix:
+    uv run ruff check --fix src tests
+    uv run ruff format src tests
+## Corrige e valida tudo antes do commit
+fix-all:
+    uv run ruff check --fix src tests
+    uv run ruff format src tests
+    uv run mypy src tests
+
 ## Verifica formatação (não modifica)
 format-check:
     uv run ruff format --check src tests
