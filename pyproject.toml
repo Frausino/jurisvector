@@ -187,8 +187,11 @@ exclude = ["migrations/", "data_base/"]
 # Conforme imports forem aparecendo nas Sprints 2 a 4, este bloco recebe
 # os módulos correspondentes (chromadb, sentence_transformers, pypdf, etc).
 module = [
-    "slowapi",
     "slowapi.*",
+    "openai.*",
+    "chromadb.*",
+    "sentence_transformers.*",
+    "pypdf.*",
 ]
 ignore_missing_imports = true
 

@@ -13,18 +13,24 @@ from sqlalchemy.orm import Session
 from docuvector.application.admin_user_management_use_case import (
     AdminUserManagementUseCase,
 )
+from docuvector.application.answer_use_case import AnswerUseCase
 from docuvector.application.auth_use_case import AuthUseCase
 from docuvector.application.document_crud_use_case import DocumentCrudUseCase
 from docuvector.application.ingestion_use_case import IngestionUseCase
 from docuvector.application.register_user_use_case import RegisterUserUseCase
+from docuvector.application.retrieval_use_case import RetrievalUseCase
 from docuvector.config.settings import Settings, get_settings
-from docuvector.domain.enums import UserRole
+from docuvector.domain.enums import EmbeddingProviderName, UserRole
 from docuvector.domain.exceptions import AuthenticationError
+from docuvector.domain.interfaces.embedding_provider import EmbeddingProvider
+from docuvector.domain.interfaces.llm_client import LlmClient
 from docuvector.domain.interfaces.password_policy_validator import (
     PasswordPolicyValidator,
 )
 from docuvector.domain.interfaces.token_service import TokenPayload
 from docuvector.infrastructure.chunking.recursive_splitter import RecursiveSplitter
+from docuvector.infrastructure.embeddings.factory import resolve_embedder
+from docuvector.infrastructure.llm.openai_llm_client import OpenAiLlmClient
 from docuvector.infrastructure.persistence.audit_repository_impl import (
     SqlAlchemyAuditRepository,
 )
@@ -98,6 +104,51 @@ def provide_password_policy() -> PasswordPolicyValidator:
 
 
 PasswordPolicyDependency = Annotated[PasswordPolicyValidator, Depends(provide_password_policy)]
+
+
+@lru_cache(maxsize=1)
+def get_llm_client() -> LlmClient:
+    settings = get_settings()
+
+    if settings.openai_api_key is None:
+        raise RuntimeError("OPENAI_API_KEY não configurada.")
+
+    return OpenAiLlmClient(
+        api_key=settings.openai_api_key.get_secret_value(),
+        model=settings.openai_llm_model,
+        temperature=settings.openai_llm_temperature,
+        max_tokens=settings.openai_llm_max_tokens,
+    )
+
+
+def provide_llm_client() -> LlmClient:
+    print(">>> PROVIDE_LLM_CLIENT")
+    return get_llm_client()
+
+
+LlmClientDependency = Annotated[LlmClient, Depends(provide_llm_client)]
+
+
+@lru_cache(maxsize=1)
+def get_vector_store() -> ChromaVectorStore:
+    settings = get_settings()
+    return ChromaVectorStore(
+        persist_directory=str(settings.chroma_persist_dir),
+        collection_name="docuvector",
+    )
+
+
+def provide_vector_store() -> ChromaVectorStore:
+    return get_vector_store()
+
+
+VectorStoreDependency = Annotated[ChromaVectorStore, Depends(provide_vector_store)]
+
+
+def resolve_embedder_for_provider(
+    provider_name: EmbeddingProviderName,
+) -> EmbeddingProvider:
+    return resolve_embedder(provider_name)
 
 
 # =============================================================
@@ -197,6 +248,32 @@ def provide_ingestion_use_case(
 IngestionUseCaseDependency = Annotated[
     IngestionUseCase,
     Depends(provide_ingestion_use_case),
+]
+
+
+def provide_answer_use_case(
+    llm_client: LlmClientDependency,
+) -> AnswerUseCase:
+    settings = get_settings()
+
+    retrieval_use_case = RetrievalUseCase(
+        vector_store=get_vector_store(),
+        default_top_k=settings.rag_top_k,
+        default_similarity_threshold=settings.rag_similarity_threshold,
+    )
+
+    return AnswerUseCase(
+        retrieval_use_case=retrieval_use_case,
+        llm_client=llm_client,
+        audit_repository=SqlAlchemyAuditRepository(
+            get_session_factory(),
+        ),
+    )
+
+
+AnswerUseCaseDependency = Annotated[
+    AnswerUseCase,
+    Depends(provide_answer_use_case),
 ]
 
 

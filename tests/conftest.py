@@ -59,12 +59,19 @@ def _set_test_environment() -> None:
     os.environ.setdefault("POSTGRES_USER", "docuvector_app")
     os.environ.setdefault(
         "POSTGRES_PASSWORD",
-        "docuvector_dev_password",  # pragma: allowlist secret
+        "trocar_por_senha_forte_local",
     )
+
     os.environ.setdefault(
         "DATABASE_URL",
-        "postgresql+psycopg://docuvector_app:docuvector_dev_password"  # pragma: allowlist secret
-        "@127.0.0.1:5432/docuvector",
+        (
+            f"postgresql+psycopg://"
+            f"{os.environ['POSTGRES_USER']}:"
+            f"{os.environ['POSTGRES_PASSWORD']}@"
+            f"{os.environ['POSTGRES_HOST']}:"
+            f"{os.environ['POSTGRES_PORT']}/"
+            f"{os.environ['POSTGRES_DB']}"
+        ),
     )
 
     jwt_test_secret = "".join(["0123456789abcdef"] * 4)
