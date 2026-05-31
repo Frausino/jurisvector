@@ -19,11 +19,13 @@ from docuvector.api.routers import admin_users as admin_users_router
 from docuvector.api.routers import auth as auth_router
 from docuvector.api.routers import documents as documents_router
 from docuvector.api.routers import health
+from docuvector.api.routers import queries as queries_router
 from docuvector.config.settings import Settings, get_settings
 from docuvector.domain.exceptions import (
     AuthenticationError,
     AuthorizationError,
     DuplicateResourceError,
+    LlmGenerationError,
     ResourceNotFoundError,
     ValidationError,
 )
@@ -92,6 +94,10 @@ def create_app() -> FastAPI:
         DuplicateResourceError,
         _duplicate_resource_handler,  # type: ignore[arg-type]
     )
+    fastapi_app.add_exception_handler(
+        LlmGenerationError,
+        _llm_generation_handler,  # type: ignore[arg-type]
+    )
 
     if settings.is_development:
         fastapi_app.add_middleware(
@@ -106,6 +112,7 @@ def create_app() -> FastAPI:
     fastapi_app.include_router(auth_router.router)
     fastapi_app.include_router(documents_router.router)
     fastapi_app.include_router(admin_users_router.router)
+    fastapi_app.include_router(queries_router.router)
 
     return fastapi_app
 
@@ -146,6 +153,20 @@ async def _duplicate_resource_handler(
     _request: Request, exc: DuplicateResourceError
 ) -> JSONResponse:
     return _build_error_response(status.HTTP_409_CONFLICT, "duplicate_resource", str(exc))
+
+
+async def _llm_generation_handler(_request: Request, exc: LlmGenerationError) -> JSONResponse:
+    """LLM upstream falhou: traduz como 502 Bad Gateway.
+
+    Mensagem genérica para o cliente (não vazamos detalhes internos da
+    OpenAI), mas o audit log já registrou a falha completa com
+    correlação ao usuário.
+    """
+    return _build_error_response(
+        status.HTTP_502_BAD_GATEWAY,
+        "llm_upstream_failure",
+        "Não foi possível gerar uma resposta neste momento. Tente novamente.",
+    )
 
 
 async def _rate_limit_handler(_request: Request, exc: RateLimitExceeded) -> JSONResponse:
