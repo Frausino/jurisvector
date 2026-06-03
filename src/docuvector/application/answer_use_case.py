@@ -10,24 +10,31 @@ Composição:
 
 Pontos de design:
 
-1.  **Audit centralizado aqui, não no retrieval.** Uma pergunta = um
-    evento. Mesmo que o retrieval seja chamado isoladamente em outro
-    fluxo (futuro), o evento `QUERY_EXECUTED` representa o ciclo
-    completo de answer.
+1.  **LLM é parâmetro do método `ask`, não do `__init__`.** O router
+    resolve qual provider usar a partir do `llm_provider` na request
+    e passa explicitamente para o use case. Isso permite alternar
+    OpenAI/Ollama/Mock por chamada, sem singleton fixo e sem fallback
+    escondido. O use case fica stateless quanto ao vendor.
 
-2.  **`grounded` detectado pelo texto canônico.** O prompt instrui o
+2.  **Audit centralizado aqui, não no retrieval.** Uma pergunta = um
+    evento `QUERY_EXECUTED`. O `metadata` carrega o `llm_provider` usado,
+    permitindo dashboards de custo/latência por provider sem schema
+    adicional.
+
+3.  **`grounded` detectado pelo texto canônico.** O prompt instrui o
     LLM a usar uma frase EXATA quando não tem contexto suficiente.
     Detectamos essa frase para marcar a resposta como não-fundamentada
-    e o front exibe um indicador. Heurística simples, robusta a
-    pequenas variações via `casefold`.
+    e o front exibe um indicador. Heurística robusta a pequenas
+    variações via `casefold`.
 
-3.  **Sem retry no nível do use case.** O `OpenAiLlmClient` já delega
-    retry para o SDK. Re-tentar aqui em cima geraria custo dobrado e
-    poderia mascarar problemas reais.
+4.  **Sem retry no nível do use case.** Cada cliente concreto decide
+    sua política (SDK da OpenAI tem retry; Ollama, não). Re-tentar
+    aqui mascararia o vendor e geraria custo dobrado em cloud.
 
-4.  **`correlation_id` propagado para o audit.** Se a request vier
-    com um (futuro middleware HTTP), eventos do mesmo ciclo ficam
-    encadeados. Hoje é None, mas o argumento já existe.
+5.  **`correlation_id` propagado para o audit.** Hoje é None, mas a
+    entidade já suporta. Quando o middleware de tracing entrar, todos
+    os eventos da mesma requisição ficam encadeados sem mudar este
+    código.
 """
 
 from __future__ import annotations
@@ -39,7 +46,7 @@ from uuid import UUID
 from docuvector.application.prompts import build_user_prompt, get_system_prompt
 from docuvector.application.retrieval_use_case import RetrievalUseCase
 from docuvector.domain.entities import Answer, AuditEvent
-from docuvector.domain.enums import AuditAction, AuditStatus
+from docuvector.domain.enums import AuditAction, AuditStatus, LlmProviderName
 from docuvector.domain.exceptions import LlmGenerationError
 from docuvector.domain.interfaces import AuditRepository, EmbeddingProvider, LlmClient
 
@@ -51,12 +58,15 @@ _NOT_ENOUGH_CONTEXT_FRAGMENT = "não tenho contexto suficiente"
 class AskInput:
     """Entrada compacta para o caso de uso.
 
-    Existe para evitar listar 6+ parâmetros posicionais no router.
+    `llm_provider` é metadado de auditoria: identifica qual provider
+    o router resolveu. O `LlmClient` correspondente já foi instanciado
+    e é passado separadamente para `ask`.
     """
 
     owner_id: UUID
     query: str
     embedding_provider: EmbeddingProvider
+    llm_provider: LlmProviderName
     client_ip: str | None = None
     user_agent: str | None = None
     correlation_id: UUID | None = None
@@ -70,15 +80,18 @@ class AnswerUseCase:
     def __init__(
         self,
         retrieval_use_case: RetrievalUseCase,
-        llm_client: LlmClient,
         audit_repository: AuditRepository,
     ) -> None:
         self._retrieval = retrieval_use_case
-        self._llm = llm_client
         self._audit = audit_repository
 
-    def ask(self, ask_input: AskInput) -> Answer:
-        """Executa pergunta → contexto → resposta com fontes."""
+    def ask(self, ask_input: AskInput, llm_client: LlmClient) -> Answer:
+        """Executa pergunta → contexto → resposta com fontes.
+
+        `llm_client` é OBRIGATÓRIO e vem do router (resolvido pelo
+        `llm_provider` da request). Sem fallback escondido: se o
+        router não passar, o tipo já falha.
+        """
         wall_clock_start = time.perf_counter()
 
         retrieval_result = self._retrieval.retrieve(
@@ -90,7 +103,7 @@ class AnswerUseCase:
         )
 
         try:
-            completion = self._llm.complete(
+            completion = llm_client.complete(
                 system_prompt=get_system_prompt(),
                 user_prompt=build_user_prompt(
                     query=retrieval_result.query,
@@ -156,6 +169,7 @@ class AnswerUseCase:
                     "model": answer.model,
                     "grounded": answer.grounded,
                     "embedding_provider": ask_input.embedding_provider.provider_name.value,
+                    "llm_provider": ask_input.llm_provider.value,
                 },
             )
         )
@@ -180,6 +194,7 @@ class AnswerUseCase:
                     "sources_count": chunks_count,
                     "latency_ms": elapsed_ms,
                     "embedding_provider": ask_input.embedding_provider.provider_name.value,
+                    "llm_provider": ask_input.llm_provider.value,
                     "reason": "llm_failure",
                 },
             )

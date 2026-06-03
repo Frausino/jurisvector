@@ -20,17 +20,13 @@ from docuvector.application.ingestion_use_case import IngestionUseCase
 from docuvector.application.register_user_use_case import RegisterUserUseCase
 from docuvector.application.retrieval_use_case import RetrievalUseCase
 from docuvector.config.settings import Settings, get_settings
-from docuvector.domain.enums import EmbeddingProviderName, UserRole
+from docuvector.domain.enums import UserRole
 from docuvector.domain.exceptions import AuthenticationError
-from docuvector.domain.interfaces.embedding_provider import EmbeddingProvider
-from docuvector.domain.interfaces.llm_client import LlmClient
 from docuvector.domain.interfaces.password_policy_validator import (
     PasswordPolicyValidator,
 )
 from docuvector.domain.interfaces.token_service import TokenPayload
 from docuvector.infrastructure.chunking.recursive_splitter import RecursiveSplitter
-from docuvector.infrastructure.embeddings.factory import resolve_embedder
-from docuvector.infrastructure.llm.openai_llm_client import OpenAiLlmClient
 from docuvector.infrastructure.persistence.audit_repository_impl import (
     SqlAlchemyAuditRepository,
 )
@@ -107,29 +103,6 @@ PasswordPolicyDependency = Annotated[PasswordPolicyValidator, Depends(provide_pa
 
 
 @lru_cache(maxsize=1)
-def get_llm_client() -> LlmClient:
-    settings = get_settings()
-
-    if settings.openai_api_key is None:
-        raise RuntimeError("OPENAI_API_KEY não configurada.")
-
-    return OpenAiLlmClient(
-        api_key=settings.openai_api_key.get_secret_value(),
-        model=settings.openai_llm_model,
-        temperature=settings.openai_llm_temperature,
-        max_tokens=settings.openai_llm_max_tokens,
-    )
-
-
-def provide_llm_client() -> LlmClient:
-    print(">>> PROVIDE_LLM_CLIENT")
-    return get_llm_client()
-
-
-LlmClientDependency = Annotated[LlmClient, Depends(provide_llm_client)]
-
-
-@lru_cache(maxsize=1)
 def get_vector_store() -> ChromaVectorStore:
     settings = get_settings()
     return ChromaVectorStore(
@@ -143,12 +116,6 @@ def provide_vector_store() -> ChromaVectorStore:
 
 
 VectorStoreDependency = Annotated[ChromaVectorStore, Depends(provide_vector_store)]
-
-
-def resolve_embedder_for_provider(
-    provider_name: EmbeddingProviderName,
-) -> EmbeddingProvider:
-    return resolve_embedder(provider_name)
 
 
 # =============================================================
@@ -251,9 +218,14 @@ IngestionUseCaseDependency = Annotated[
 ]
 
 
-def provide_answer_use_case(
-    llm_client: LlmClientDependency,
-) -> AnswerUseCase:
+def provide_answer_use_case() -> AnswerUseCase:
+    """Constrói o AnswerUseCase sem amarrar a um LLM específico.
+
+    O `LlmClient` concreto é resolvido pelo router a cada request a
+    partir do campo `llm_provider`, e passado explicitamente para
+    `ask()`. Aqui só montamos o retrieval e o audit, que são
+    invariantes do fluxo.
+    """
     settings = get_settings()
 
     retrieval_use_case = RetrievalUseCase(
@@ -264,7 +236,6 @@ def provide_answer_use_case(
 
     return AnswerUseCase(
         retrieval_use_case=retrieval_use_case,
-        llm_client=llm_client,
         audit_repository=SqlAlchemyAuditRepository(
             get_session_factory(),
         ),
