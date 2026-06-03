@@ -12,39 +12,32 @@ dependencies = [
     # Validação (núcleo, sem FastAPI)
     "pydantic[email]>=2.7,<3.0",
     "pydantic-settings>=2.4,<3.0",
-
     # Persistência relacional
     "sqlalchemy>=2.0,<3.0",
     "alembic>=1.13,<2.0",
     "psycopg[binary]>=3.2,<4.0",
-
     # Segurança
     "passlib[bcrypt]>=1.7,<2.0",
     "bcrypt<4.1",  # passlib 1.7.x trava em bcrypt >= 4.1 (atributo __about__ removido)
     "python-jose[cryptography]>=3.3,<4.0",
-
     # Logging
     "structlog>=24.4,<25.0",
-
     # Numérico e compressão
     "numpy>=1.26,<3.0",
     "scikit-learn>=1.5,<2.0",
     "scipy>=1.13,<2.0",
-
     # Vector store
     "chromadb>=0.5,<1.0",
-
     # Embeddings (linha 5.x; mitiga CVEs da linha 4.x)
     "sentence-transformers>=5.0.0,<6.0",
     "transformers>=5.0.0,<6.0",
     "openai>=1.40,<2.0",
-
     # Extração de documentos
     "pypdf>=6.10.2,<7.0",
-
     # Utilidades
     "httpx>=0.27,<0.30",
     "python-dotenv>=1.0,<2.0",
+    "aiohttp>=3.14.0",
 ]
 
 [project.optional-dependencies]

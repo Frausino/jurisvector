@@ -190,15 +190,11 @@ DocumentCrudUseCaseDependency = Annotated[
 def provide_ingestion_use_case(
     session: SessionDependency,
     settings: SettingsDependency,
+    vector_store: VectorStoreDependency,
 ) -> IngestionUseCase:
     splitter = RecursiveSplitter(
         chunk_size=settings.rag_chunk_size,
         chunk_overlap=settings.rag_chunk_overlap,
-    )
-
-    vector_store = ChromaVectorStore(
-        persist_directory=str(settings.chroma_persist_dir),
-        collection_name="docuvector",
     )
 
     return IngestionUseCase(
@@ -218,7 +214,9 @@ IngestionUseCaseDependency = Annotated[
 ]
 
 
-def provide_answer_use_case() -> AnswerUseCase:
+def provide_answer_use_case(
+    vector_store: VectorStoreDependency,
+) -> AnswerUseCase:
     """Constrói o AnswerUseCase sem amarrar a um LLM específico.
 
     O `LlmClient` concreto é resolvido pelo router a cada request a
@@ -229,7 +227,7 @@ def provide_answer_use_case() -> AnswerUseCase:
     settings = get_settings()
 
     retrieval_use_case = RetrievalUseCase(
-        vector_store=get_vector_store(),
+        vector_store=vector_store,
         default_top_k=settings.rag_top_k,
         default_similarity_threshold=settings.rag_similarity_threshold,
     )

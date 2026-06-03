@@ -1,6 +1,7 @@
 """Interfaces (Protocols) puras da camada de domínio."""
 
 from docuvector.domain.interfaces.audit_repository import AuditRepository
+from docuvector.domain.interfaces.compressor import Compressor
 from docuvector.domain.interfaces.document_extractor import DocumentExtractor
 from docuvector.domain.interfaces.document_repository import DocumentRepository
 from docuvector.domain.interfaces.embedding_provider import (
@@ -20,6 +21,7 @@ from docuvector.domain.interfaces.vector_store import ChunkVector, VectorStore
 __all__ = [
     "AuditRepository",
     "ChunkVector",
+    "Compressor",
     "DocumentExtractor",
     "DocumentRepository",
     "EmbeddingProvider",
