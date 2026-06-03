@@ -15,6 +15,7 @@ from fastapi.responses import JSONResponse
 from slowapi.errors import RateLimitExceeded
 
 from docuvector import __version__
+from docuvector.api.limiting import shared_limiter
 from docuvector.api.routers import admin_users as admin_users_router
 from docuvector.api.routers import auth as auth_router
 from docuvector.api.routers import documents as documents_router
@@ -68,7 +69,7 @@ def create_app() -> FastAPI:
         lifespan=application_lifespan,
     )
 
-    fastapi_app.state.limiter = auth_router.limiter
+    fastapi_app.state.limiter = shared_limiter
     fastapi_app.add_exception_handler(
         RateLimitExceeded,
         _rate_limit_handler,  # type: ignore[arg-type]

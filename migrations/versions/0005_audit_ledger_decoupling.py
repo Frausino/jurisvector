@@ -42,7 +42,7 @@ from sqlalchemy.dialects.postgresql import ENUM
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 
 revision: str = "0004_audit_decoupled"
-down_revision: str | None = "02e0ae67b1f1"
+down_revision: str | None = "02e0ae67b1f1" # pragma: allowlist secret
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

@@ -6,7 +6,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from docuvector.domain.enums import EmbeddingProviderName
+from docuvector.domain.enums import EmbeddingProviderName, LlmProviderName
 
 _MIN_QUERY_LENGTH = 3
 _MAX_QUERY_LENGTH = 1000
@@ -16,10 +16,11 @@ class AskRequest(BaseModel):
     """Pergunta do usuário ao seu corpus.
 
     `embedding_provider` precisa coincidir com o provider usado no
-    upload dos documentos a serem pesquisados; o ChromaDB indexa
-    vetores em uma única collection e os vetores têm dimensões
-    distintas por provider. Misturar provider de query e de ingestão
-    devolve resultados vazios ou erro de dimensão.
+    upload dos documentos a serem pesquisados.
+
+    `llm_provider` permite alternar entre cloud (OpenAI), local
+    (Ollama) e mock (determinístico, CI). Quando omitido, o servidor
+    aplica o default configurado em `LLM_DEFAULT_PROVIDER`.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -34,6 +35,13 @@ class AskRequest(BaseModel):
         description=(
             "Provedor de embedding usado para vetorizar a query. Deve "
             "ser o mesmo usado no upload dos documentos."
+        ),
+    )
+    llm_provider: LlmProviderName | None = Field(
+        default=None,
+        description=(
+            "Provedor de geração de resposta. Quando ausente, o servidor "
+            "usa `LLM_DEFAULT_PROVIDER`. Opções: `openai`, `ollama`, `mock`."
         ),
     )
     top_k: int | None = Field(
@@ -84,3 +92,30 @@ class AnswerResponse(BaseModel):
     cost_usd: float = Field(ge=0.0)
     latency_ms: int = Field(ge=0)
     model: str
+    llm_provider: LlmProviderName = Field(
+        description="Provedor que efetivamente gerou esta resposta."
+    )
+
+
+class LlmProviderOption(BaseModel):
+    """Item da listagem de providers, com metadados para a UX."""
+
+    model_config = ConfigDict(frozen=True)
+
+    name: LlmProviderName
+    model: str = Field(description="Modelo concreto que será usado para este provider.")
+    description: str
+    cost_tier: str = Field(
+        description="Indicador qualitativo: `free`, `pay-per-token`, `local-zero-cost`.",
+    )
+
+
+class LlmProviderListResponse(BaseModel):
+    """Envelope da listagem de providers disponíveis no ambiente."""
+
+    model_config = ConfigDict(frozen=True)
+
+    items: list[LlmProviderOption]
+    default: LlmProviderName = Field(
+        description="Provider usado quando o cliente omite `llm_provider`.",
+    )

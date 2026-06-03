@@ -10,6 +10,8 @@ from typing import Literal
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from docuvector.domain.enums import LlmProviderName
+
 
 class ApplicationEnvironment(str, Enum):
     DEVELOPMENT = "development"
@@ -131,6 +133,36 @@ class Settings(BaseSettings):
         alias="OPENAI_LLM_TEMPERATURE",
     )
     openai_llm_max_tokens: int = Field(default=600, ge=1, alias="OPENAI_LLM_MAX_TOKENS")
+
+    # Provedor LLM padrão quando o request não especifica `llm_provider`.
+    # Em dev/test, `mock` permite executar a suíte sem rede e sem chave.
+    # Em produção local, `ollama` é o caminho operacional sem custo.
+    llm_default_provider: LlmProviderName = Field(
+        default=LlmProviderName.MOCK,
+        alias="LLM_DEFAULT_PROVIDER",
+    )
+
+    # =============================================================
+    # Ollama (LLM local via HTTP)
+    # =============================================================
+    ollama_base_url: str = Field(
+        default="http://localhost:11434",
+        alias="OLLAMA_BASE_URL",
+    )
+    ollama_model: str = Field(
+        default="qwen2.5:7b",
+        alias="OLLAMA_MODEL",
+        description=(
+            "Modelo Ollama (ex.: 'qwen2.5:7b', 'llama3.2:3b'). "
+            "Precisa ter sido baixado via `ollama pull <modelo>`."
+        ),
+    )
+    ollama_timeout_seconds: float = Field(
+        default=60.0,
+        ge=1.0,
+        le=600.0,
+        alias="OLLAMA_TIMEOUT_SECONDS",
+    )
 
     # =============================================================
     # RAG
