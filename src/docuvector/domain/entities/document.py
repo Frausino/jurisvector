@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
-from docuvector.domain.enums import DocumentStatus, FileFormat
+from docuvector.domain.enums import CompressionMethod, DocumentStatus, FileFormat
 
 
 def _utc_now() -> datetime:
@@ -36,6 +36,14 @@ class Document:
     failure_reason: str | None = None
     created_at: datetime = field(default_factory=_utc_now)
     updated_at: datetime = field(default_factory=_utc_now)
+
+    # Campos preenchidos pela Sprint 4 (CompressionBenchmarkUseCase).
+    # Ficam None enquanto o benchmark não for executado.
+    compression_method: CompressionMethod | None = None
+    original_dimension: int | None = None
+    compressed_dimension: int | None = None
+    semantic_retention: float | None = None
+    ingest_time_ms: int | None = None
 
     def is_ready_for_retrieval(self) -> bool:
         """Apenas documentos com embeddings completos participam de queries."""

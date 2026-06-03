@@ -83,3 +83,25 @@ class LlmProviderName(str, Enum):
     OPENAI = "openai"
     OLLAMA = "ollama"
     MOCK = "mock"
+
+
+class CompressionMethod(str, Enum):
+    """Métodos de compressão de embeddings suportados pelo benchmark.
+
+    Cada método tem características distintas de trade-off entre
+    redução de dimensão/bytes e retenção semântica:
+
+    - PCA: redução de dimensão linear com preservação máxima de variância.
+      Requer fit em batch. Melhor retenção semântica na maioria dos casos.
+    - RANDOM_PROJECTION: redução de dimensão via matriz aleatória gaussiana.
+      Requer fit em batch. Mais rápido que PCA, levemente inferior em retenção.
+    - INT8: quantização sem redução de dimensão. 4x menos bytes, quase
+      sem perda semântica. Stateless (não precisa de fit).
+    - BINARY: quantização extrema. 32x menos bytes teóricos. Perda de
+      qualidade visível. Stateless. Útil para filtros aproximados.
+    """
+
+    PCA = "pca"
+    RANDOM_PROJECTION = "random_projection"
+    INT8 = "int8"
+    BINARY = "binary"
