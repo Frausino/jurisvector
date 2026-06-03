@@ -70,3 +70,16 @@ class EmbeddingProviderName(str, Enum):
 
     OPENAI = "openai"
     SENTENCE_TRANSFORMERS = "sentence_transformers"
+
+
+class LlmProviderName(str, Enum):
+    """Provedores de geração de resposta (LLM) suportados.
+
+    - `OPENAI`: API cloud (gpt-4o-mini etc.). Custo por token, alta qualidade.
+    - `OLLAMA`: servidor local (qwen2.5, llama3.2 etc.). Custo zero, sem rede.
+    - `MOCK`:   determinístico, para CI/dev offline. Não chama nada externo.
+    """
+
+    OPENAI = "openai"
+    OLLAMA = "ollama"
+    MOCK = "mock"

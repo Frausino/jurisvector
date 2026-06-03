@@ -104,7 +104,13 @@ def _set_test_environment() -> None:
     os.environ.setdefault("OPENAI_LLM_MODEL", "gpt-4o-mini")
     os.environ.setdefault("OPENAI_LLM_TEMPERATURE", "0.2")
     os.environ.setdefault("OPENAI_LLM_MAX_TOKENS", "600")
-
+    # Bloco 5: LLM como provider pluggable. Em teste, o default é
+    # `mock` (sem rede, sem chave). Em dev/prod o operador troca para
+    # `ollama` ou `openai`.
+    os.environ.setdefault("LLM_DEFAULT_PROVIDER", "mock")
+    os.environ.setdefault("OLLAMA_BASE_URL", "http://localhost:11434")
+    os.environ.setdefault("OLLAMA_MODEL", "qwen2.5:7b")
+    os.environ.setdefault("OLLAMA_TIMEOUT_SECONDS", "60")
     os.environ.setdefault("RAG_CHUNK_SIZE", "1000")
     os.environ.setdefault("RAG_CHUNK_OVERLAP", "200")
     os.environ.setdefault("RAG_TOP_K", "5")

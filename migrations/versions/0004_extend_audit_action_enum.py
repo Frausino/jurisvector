@@ -6,7 +6,7 @@ from typing import Sequence, Union
 
 from alembic import op
 
-revision: str = "02e0ae67b1f1"
+revision: str = "02e0ae67b1f1" # pragma: allowlist secret
 down_revision: Union[str, None] = "0003_documents_and_chunks"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None

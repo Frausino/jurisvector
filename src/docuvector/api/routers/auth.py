@@ -23,8 +23,6 @@ import secrets
 import time
 
 from fastapi import APIRouter, Request, status
-from slowapi import Limiter
-from slowapi.util import get_remote_address
 
 from docuvector.api.deps import (
     AuthUseCaseDependency,
@@ -32,6 +30,7 @@ from docuvector.api.deps import (
     CurrentTokenDependency,
     RegisterUserUseCaseDependency,
 )
+from docuvector.api.limiting import shared_limiter
 from docuvector.api.schemas.auth import (
     LoginRequest,
     LoginResponse,
@@ -47,8 +46,6 @@ _REGISTER_RATE = f"{_settings.register_rate_limit_per_minute}/minute"
 
 # Jitter aleatório de até 30ms para destruir fingerprint do piso fixo.
 _MAX_JITTER_MILLISECONDS = 30
-
-limiter = Limiter(key_func=get_remote_address)
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
@@ -66,7 +63,7 @@ router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
         429: {"description": "Limite de tentativas excedido."},
     },
 )
-@limiter.limit(_LOGIN_RATE)
+@shared_limiter.limit(_LOGIN_RATE)
 def login(
     request: Request,
     payload: LoginRequest,
@@ -127,7 +124,7 @@ def me(
         429: {"description": "Limite de tentativas excedido."},
     },
 )
-@limiter.limit(_REGISTER_RATE)
+@shared_limiter.limit(_REGISTER_RATE)
 def register(
     request: Request,
     payload: RegisterRequest,
