@@ -15,6 +15,9 @@ from docuvector.application.admin_user_management_use_case import (
 )
 from docuvector.application.answer_use_case import AnswerUseCase
 from docuvector.application.auth_use_case import AuthUseCase
+from docuvector.application.compression_benchmark_use_case import (
+    CompressionBenchmarkUseCase,
+)
 from docuvector.application.document_crud_use_case import DocumentCrudUseCase
 from docuvector.application.ingestion_use_case import IngestionUseCase
 from docuvector.application.register_user_use_case import RegisterUserUseCase
@@ -245,6 +248,31 @@ def provide_answer_use_case(
 AnswerUseCaseDependency = Annotated[
     AnswerUseCase,
     Depends(provide_answer_use_case),
+]
+
+
+def provide_compression_benchmark_use_case(
+    session: SessionDependency,
+    vector_store: VectorStoreDependency,
+) -> CompressionBenchmarkUseCase:
+    """Constrói o use case de benchmark reutilizando o VectorStore singleton.
+
+    Usa `VectorStoreDependency` (já existe no deps.py) para não criar
+    uma segunda instância do Chroma por request — o ChromaVectorStore
+    é caro de construir (abre conexão com o banco de vetores).
+    """
+    return CompressionBenchmarkUseCase(
+        document_repository=SqlAlchemyDocumentRepository(session),
+        vector_store=vector_store,
+        audit_repository=SqlAlchemyAuditRepository(
+            get_session_factory(),
+        ),
+    )
+
+
+CompressionBenchmarkUseCaseDependency = Annotated[
+    CompressionBenchmarkUseCase,
+    Depends(provide_compression_benchmark_use_case),
 ]
 
 

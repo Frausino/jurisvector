@@ -29,6 +29,7 @@ from docuvector.domain.exceptions import (
     LlmGenerationError,
     ResourceNotFoundError,
     ValidationError,
+    VectorStoreError,
 )
 from docuvector.infrastructure.logging.structlog_config import (
     configure_logging,
@@ -99,6 +100,10 @@ def create_app() -> FastAPI:
         LlmGenerationError,
         _llm_generation_handler,  # type: ignore[arg-type]
     )
+    fastapi_app.add_exception_handler(
+        VectorStoreError,
+        _vector_store_error_handler,  # type: ignore[arg-type]
+    )
 
     if settings.is_development:
         fastapi_app.add_middleware(
@@ -167,6 +172,19 @@ async def _llm_generation_handler(_request: Request, exc: LlmGenerationError) ->
         status.HTTP_502_BAD_GATEWAY,
         "llm_upstream_failure",
         "Não foi possível gerar uma resposta neste momento. Tente novamente.",
+    )
+
+
+async def _vector_store_error_handler(_request: Request, exc: VectorStoreError) -> JSONResponse:
+    """VectorStore inacessível → 502 Bad Gateway.
+
+    Distingue falha de upstream (Chroma indisponível, documento sem
+    vetores) de bug de aplicação (500). O cliente pode tentar novamente.
+    """
+    return _build_error_response(
+        status.HTTP_502_BAD_GATEWAY,
+        "vector_store_failure",
+        str(exc),
     )
 
 

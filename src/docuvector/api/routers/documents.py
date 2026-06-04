@@ -8,10 +8,16 @@ from fastapi import APIRouter, File, Form, Request, UploadFile, status
 
 from docuvector.api.deps import (
     ClientIpDependency,
+    CompressionBenchmarkUseCaseDependency,
     CurrentTokenDependency,
     DocumentCrudUseCaseDependency,
     IngestionUseCaseDependency,
     SettingsDependency,
+)
+from docuvector.api.schemas.benchmark import (
+    BenchmarkCompressionRequest,
+    BenchmarkCompressionResponse,
+    CompressorBenchmarkItem,
 )
 from docuvector.api.schemas.documents import (
     DocumentListResponse,
@@ -20,6 +26,8 @@ from docuvector.api.schemas.documents import (
     EmbeddingProviderListResponse,
     EmbeddingProviderOption,
 )
+from docuvector.application.compression_benchmark_use_case import BenchmarkInput
+from docuvector.domain.entities.compression_metrics import CompressionMetrics
 from docuvector.domain.enums import EmbeddingProviderName
 from docuvector.domain.exceptions import DocumentTooLargeError
 from docuvector.infrastructure.embeddings.factory import (
@@ -201,6 +209,77 @@ def get_document(
         user_agent=request.headers.get("user-agent"),
     )
     return DocumentResponse.model_validate(document)
+
+
+# =============================================================
+# POST /api/v1/documents/{id}/benchmark-compression
+# =============================================================
+@router.post(
+    "/{document_id}/benchmark-compression",
+    response_model=BenchmarkCompressionResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Benchmark de compressão de embeddings",
+    description=(
+        "Executa PCA, RandomProjection, Int8 e Binary sobre os embeddings "
+        "reais do documento. Calcula retenção semântica via Pearson de "
+        "matrizes de similaridade coseno, persiste o melhor resultado e "
+        "retorna a comparação completa.\n\n"
+        "`savings_pct` indica a economia de armazenamento do melhor "
+        "compressor vs o corpus original em float32."
+    ),
+    responses={
+        200: {"description": "Benchmark executado com sucesso."},
+        401: {"description": "Token ausente ou inválido."},
+        404: {"description": "Documento não encontrado."},
+        422: {"description": "target_dim inválido (mínimo: 2)."},
+        502: {"description": "Falha ao acessar vetores no ChromaDB."},
+    },
+)
+def benchmark_compression(
+    document_id: UUID,
+    payload: BenchmarkCompressionRequest,
+    token_payload: CurrentTokenDependency,
+    benchmark_use_case: CompressionBenchmarkUseCaseDependency,
+) -> BenchmarkCompressionResponse:
+    results = benchmark_use_case.run(
+        BenchmarkInput(
+            owner_id=token_payload.user_id,
+            document_id=document_id,
+            target_dim=payload.target_dim,
+        )
+    )
+
+    best = max(results, key=lambda m: m.semantic_retention)
+
+    return BenchmarkCompressionResponse(
+        document_id=document_id,
+        results=[_to_benchmark_item(m) for m in results],
+        best_method=best.method,
+        best_semantic_retention=best.semantic_retention,
+        original_storage_mb=_bytes_to_mb(best.original_storage_bytes(best.n_vectors)),
+        best_storage_mb=_bytes_to_mb(best.storage_bytes(best.n_vectors)),
+        savings_pct=round(best.space_savings_pct, 2),
+    )
+
+
+def _to_benchmark_item(metrics: CompressionMetrics) -> CompressorBenchmarkItem:
+    """Converte entidade de domínio para o schema HTTP."""
+    return CompressorBenchmarkItem(
+        method=metrics.method,
+        original_dim=metrics.original_dim,
+        compressed_dim=metrics.compressed_dim,
+        ratio_bytes=metrics.ratio_bytes,
+        space_savings_pct=metrics.space_savings_pct,
+        semantic_retention=metrics.semantic_retention,
+        fit_time_ms=metrics.fit_time_ms,
+        transform_time_ms=metrics.transform_time_ms,
+        n_vectors=metrics.n_vectors,
+    )
+
+
+def _bytes_to_mb(n_bytes: int) -> float:
+    """Converte bytes para megabytes com 4 casas decimais."""
+    return round(n_bytes / (1024.0 * 1024.0), 4)
 
 
 # =============================================================
