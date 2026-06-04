@@ -144,7 +144,8 @@ def register(
         return RegistrationAcknowledgement(
             message=(
                 "Solicitação de cadastro recebida. Se este e-mail ainda não "
-                "estiver em uso, a conta foi criada e você já pode fazer login."
+                "estiver em uso, "
+                "a conta foi criada e você já pode fazer login."
             ),
         )
     finally:

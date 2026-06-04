@@ -34,8 +34,10 @@ router = APIRouter(prefix="/api/v1", tags=["health"])
     status_code=status.HTTP_200_OK,
     summary="Verificação de saúde",
     description=(
-        "Retorna o estado atual do processo. Endpoint público, sem autenticação. "
-        "Usado por orquestradores e pela demonstração para validar que a aplicação "
+        "Retorna o estado atual do processo. "
+        "Endpoint público, sem autenticação. "
+        "Usado por orquestradores "
+        "e pela demonstração para validar que a aplicação "
         "subiu corretamente."
     ),
 )
