@@ -47,10 +47,14 @@ class Compressor(Protocol):
         ...
 
     @property
-    def target_dim(self) -> int:
+    def target_dim(self) -> int | None:
         """Dimensão alvo após compressão.
 
-        Para Int8 e Binary (sem redução de dimensão), igual à dimensão de entrada.
+        Para compressores stateful (PCA, RandomProjection), retorna o valor
+        passado no construtor.
+        Para compressores stateless (Int8, Binary), retorna None até que
+        fit() ou transform() sejam chamados — a dimensão é determinada
+        pela entrada, não pelo construtor.
         """
         ...
 

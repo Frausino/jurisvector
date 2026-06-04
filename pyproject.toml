@@ -185,6 +185,7 @@ module = [
     "chromadb.*",
     "sentence_transformers.*",
     "pypdf.*",
+    "sklearn.*",
 ]
 ignore_missing_imports = true
 
