@@ -19,7 +19,10 @@ from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 import chromadb
+import numpy as np
+from chromadb.api.types import IncludeEnum
 from chromadb.config import Settings as ChromaSettings
+from numpy.typing import NDArray
 
 from docuvector.domain.entities import RetrievedChunk
 from docuvector.domain.exceptions import VectorStoreError
@@ -111,6 +114,45 @@ class ChromaVectorStore:
             raise VectorStoreError(f"Falha na busca vetorial: {chroma_failure}") from chroma_failure
 
         return self._materialize_results(results, similarity_threshold)
+
+    def get_vectors_for_document(
+        self,
+        owner_id: UUID,
+        document_id: UUID,
+    ) -> NDArray[np.float32]:
+        """Recupera a matriz de embeddings de um documento do ChromaDB.
+
+        Usa filtro composto `owner_id + document_id` para defesa BOLA:
+        mesmo que o chamador conheça o UUID do documento, só obtém os
+        vetores se for o dono.
+
+        Raises:
+            VectorStoreError: se não houver vetores ou a operação falhar.
+        """
+        where_clause: dict[str, Any] = {
+            "$and": [
+                {"owner_id": {"$eq": str(owner_id)}},
+                {"document_id": {"$eq": str(document_id)}},
+            ]
+        }
+        try:
+            result = self._collection.get(
+                where=where_clause,
+                include=[IncludeEnum.embeddings],
+            )
+        except Exception as chroma_failure:
+            raise VectorStoreError(
+                f"Falha ao recuperar vetores do documento {document_id}: {chroma_failure}"
+            ) from chroma_failure
+
+        raw_embeddings = result.get("embeddings")
+        if not raw_embeddings:
+            raise VectorStoreError(
+                f"Documento {document_id} não possui vetores indexados "
+                f"ou não pertence ao owner {owner_id}."
+            )
+
+        return np.array(raw_embeddings, dtype=np.float32)
 
     def delete_document(self, owner_id: UUID, document_id: UUID) -> int:
         """Apaga chunks de um documento, mantendo isolamento por dono."""

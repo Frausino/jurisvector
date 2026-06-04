@@ -64,6 +64,8 @@ repos:
           - httpx>=0.27
           - numpy>=2.0
           - hypothesis>=6.0
+          - scipy>=1.17
+          - scipy-stubs>=1.17.1.5
 
   ## SAST
   - repo: https://github.com/PyCQA/bandit

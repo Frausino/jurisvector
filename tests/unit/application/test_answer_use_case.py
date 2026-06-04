@@ -5,7 +5,9 @@ from __future__ import annotations
 from collections.abc import Sequence
 from uuid import UUID, uuid4
 
+import numpy as np
 import pytest
+from numpy.typing import NDArray
 
 from docuvector.application.answer_use_case import AnswerUseCase, AskInput
 from docuvector.application.retrieval_use_case import RetrievalUseCase
@@ -40,16 +42,39 @@ class _FakeEmbedder:
 
 
 class _StaticVectorStore:
-    def __init__(self, chunks_to_return: Sequence[RetrievedChunk]) -> None:
+    def __init__(
+        self,
+        chunks_to_return: Sequence[RetrievedChunk],
+    ) -> None:
         self._chunks_to_return = chunks_to_return
 
-    def add_chunks(self, _chunks) -> None:  # type: ignore[no-untyped-def]
+    def add_chunks(
+        self,
+        _chunks: Sequence[object],
+    ) -> None:
         raise NotImplementedError
 
-    def search(self, *_args, **_kwargs) -> Sequence[RetrievedChunk]:  # type: ignore[no-untyped-def]
+    def search(
+        self,
+        owner_id: UUID,
+        query_embedding: EmbeddingVector,
+        top_k: int,
+        similarity_threshold: float,
+    ) -> Sequence[RetrievedChunk]:
         return self._chunks_to_return
 
-    def delete_document(self, _owner_id: UUID, _document_id: UUID) -> int:
+    def get_vectors_for_document(
+        self,
+        owner_id: UUID,
+        document_id: UUID,
+    ) -> NDArray[np.float32]:
+        return np.empty((0, 0), dtype=np.float32)
+
+    def delete_document(
+        self,
+        _owner_id: UUID,
+        _document_id: UUID,
+    ) -> int:
         raise NotImplementedError
 
 
