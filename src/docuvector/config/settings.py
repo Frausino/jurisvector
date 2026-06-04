@@ -243,7 +243,8 @@ class Settings(BaseSettings):
         default="",
         alias="TRUSTED_PROXY_IPS",
         description=(
-            "Lista CSV de IPs de proxies confiáveis (ex.: '10.0.0.1,10.0.0.2'). "
+            "Lista CSV de IPs de proxies confiáveis "
+            "(ex.: '10.0.0.1,10.0.0.2'). "
             "Vazia em dev/local; preencher em produção atrás de reverse proxy."
         ),
     )
@@ -290,6 +291,15 @@ class Settings(BaseSettings):
     # =============================================================
     # Propriedades derivadas
     # =============================================================
+    @property
+    def jwt_secret(self) -> str:
+        """Retorna o segredo JWT como string pura.
+
+        Mantém o armazenamento interno como SecretStr e evita que
+        consumidores precisem conhecer a API do Pydantic.
+        """
+        return self.jwt_secret_key.get_secret_value()
+
     @property
     def effective_bcrypt_rounds(self) -> int:
         if self.bcrypt_rounds is not None:

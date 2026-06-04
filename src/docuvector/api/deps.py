@@ -26,7 +26,9 @@ from docuvector.domain.interfaces.password_policy_validator import (
     PasswordPolicyValidator,
 )
 from docuvector.domain.interfaces.token_service import TokenPayload
-from docuvector.infrastructure.chunking.recursive_splitter import RecursiveSplitter
+from docuvector.infrastructure.chunking.recursive_splitter import (
+    RecursiveSplitter,
+)
 from docuvector.infrastructure.persistence.audit_repository_impl import (
     SqlAlchemyAuditRepository,
 )
@@ -40,7 +42,9 @@ from docuvector.infrastructure.persistence.document_repository_impl import (
 from docuvector.infrastructure.persistence.user_repository_impl import (
     SqlAlchemyUserRepository,
 )
-from docuvector.infrastructure.security.bcrypt_hasher import BcryptPasswordHasher
+from docuvector.infrastructure.security.bcrypt_hasher import (
+    BcryptPasswordHasher,
+)
 from docuvector.infrastructure.security.jwt_service import JwtTokenService
 from docuvector.infrastructure.security.nist_password_policy_validator import (
     NistPasswordPolicyValidator,
@@ -55,11 +59,12 @@ _bearer_scheme = HTTPBearer(auto_error=False)
 # =============================================================
 # Configuração
 # =============================================================
-def provide_settings() -> Settings:
-    return get_settings()
 
 
-SettingsDependency = Annotated[Settings, Depends(provide_settings)]
+SettingsDependency = Annotated[
+    Settings,
+    Depends(get_settings),
+]
 SessionDependency = Annotated[Session, Depends(provide_session)]
 
 
@@ -75,17 +80,16 @@ def get_password_hasher() -> BcryptPasswordHasher:
 def get_token_service() -> JwtTokenService:
     settings = get_settings()
     return JwtTokenService(
-        secret_key=settings.jwt_secret_key.get_secret_value(),
+        secret_key=settings.jwt_secret,
         algorithm=settings.jwt_algorithm,
         access_token_expire_minutes=settings.jwt_access_token_expire_minutes,
     )
 
 
-def provide_token_service() -> JwtTokenService:
-    return get_token_service()
-
-
-TokenServiceDependency = Annotated[JwtTokenService, Depends(provide_token_service)]
+TokenServiceDependency = Annotated[
+    JwtTokenService,
+    Depends(get_token_service),
+]
 
 
 @lru_cache(maxsize=1)
@@ -95,11 +99,10 @@ def get_password_policy() -> PasswordPolicyValidator:
     return NistPasswordPolicyValidator(min_length=settings.password_min_length)
 
 
-def provide_password_policy() -> PasswordPolicyValidator:
-    return get_password_policy()
-
-
-PasswordPolicyDependency = Annotated[PasswordPolicyValidator, Depends(provide_password_policy)]
+PasswordPolicyDependency = Annotated[
+    PasswordPolicyValidator,
+    Depends(get_password_policy),
+]
 
 
 @lru_cache(maxsize=1)
@@ -111,11 +114,10 @@ def get_vector_store() -> ChromaVectorStore:
     )
 
 
-def provide_vector_store() -> ChromaVectorStore:
-    return get_vector_store()
-
-
-VectorStoreDependency = Annotated[ChromaVectorStore, Depends(provide_vector_store)]
+VectorStoreDependency = Annotated[
+    ChromaVectorStore,
+    Depends(get_vector_store),
+]
 
 
 # =============================================================

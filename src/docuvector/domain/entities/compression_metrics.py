@@ -66,12 +66,13 @@ class CompressionMetrics:
         ratio = (self.original_dim * _FLOAT32_BYTES) / (
             self.compressed_dim * self.bytes_per_element
         )
-
         savings = (1.0 - 1.0 / ratio) * 100.0
 
         # frozen=True exige contornar a proteção de imutabilidade aqui,
         # apenas neste ponto de inicialização. É o padrão documentado pelo
         # Python para campos derivados em dataclasses frozen.
+        # Domínio preserva precisão total. Arredondamento para exibição
+        # (2 casas decimais) fica na camada de serialização/schema da API.
         object.__setattr__(self, "ratio_bytes", ratio)
         object.__setattr__(self, "space_savings_pct", savings)
 
