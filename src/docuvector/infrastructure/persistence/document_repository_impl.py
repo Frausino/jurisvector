@@ -14,7 +14,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from docuvector.domain.entities import Document, DocumentChunk
-from docuvector.domain.enums import DocumentStatus
+from docuvector.domain.entities.compression_metrics import CompressionMetrics
+from docuvector.domain.enums import CompressionMethod, DocumentStatus
 from docuvector.infrastructure.persistence.models import (
     DocumentChunkModel,
     DocumentModel,
@@ -111,6 +112,31 @@ class SqlAlchemyDocumentRepository:
         self._session.flush()
         return self._to_entity(record)
 
+    def update_compression_metrics(
+        self,
+        owner_id: UUID,
+        document_id: UUID,
+        metrics: CompressionMetrics,
+    ) -> Document | None:
+        """Persiste métricas de compressão. Espelha o padrão de update_status."""
+        record = self._session.execute(
+            select(DocumentModel).where(
+                DocumentModel.id == document_id,
+                DocumentModel.owner_id == owner_id,
+            )
+        ).scalar_one_or_none()
+
+        if record is None:
+            return None
+
+        record.compression_method = metrics.method.value
+        record.original_dimension = metrics.original_dim
+        record.compressed_dimension = metrics.compressed_dim
+        record.semantic_retention = metrics.semantic_retention
+        record.ingest_time_ms = int(metrics.fit_time_ms + metrics.transform_time_ms)
+        self._session.flush()
+        return self._to_entity(record)
+
     def delete_for_owner(self, owner_id: UUID, document_id: UUID) -> bool:
         """Remove documento e seus chunks (CASCADE)."""
         record = self._session.execute(
@@ -195,6 +221,17 @@ class SqlAlchemyDocumentRepository:
             failure_reason=record.failure_reason,
             created_at=record.created_at,
             updated_at=record.updated_at,
+            compression_method=(
+                CompressionMethod(record.compression_method)
+                if record.compression_method is not None
+                else None
+            ),
+            original_dimension=record.original_dimension,
+            compressed_dimension=record.compressed_dimension,
+            semantic_retention=(
+                float(record.semantic_retention) if record.semantic_retention is not None else None
+            ),
+            ingest_time_ms=record.ingest_time_ms,
         )
 
     @staticmethod

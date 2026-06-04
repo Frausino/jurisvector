@@ -12,6 +12,7 @@ from typing import Protocol
 from uuid import UUID
 
 from docuvector.domain.entities import Document, DocumentChunk
+from docuvector.domain.entities.compression_metrics import CompressionMetrics
 from docuvector.domain.enums import DocumentStatus
 
 
@@ -60,6 +61,25 @@ class DocumentRepository(Protocol):
 
     def delete_for_owner(self, owner_id: UUID, document_id: UUID) -> bool:
         """Remove documento e seus chunks (CASCADE); devolve sucesso."""
+        ...
+
+    def update_compression_metrics(
+        self,
+        owner_id: UUID,
+        document_id: UUID,
+        metrics: CompressionMetrics,
+    ) -> Document | None:
+        """Persiste as métricas do melhor compressor no documento.
+
+        Preenche: compression_method, original_dimension, compressed_dimension,
+        semantic_retention, ingest_time_ms.
+
+        BOLA: filtra por owner_id + document_id. Não atualiza documento de
+        outro tenant mesmo que o UUID seja conhecido.
+
+        Returns:
+            Documento atualizado, ou None se não encontrado para este owner.
+        """
         ...
 
     def save_chunks(self, chunks: Sequence[DocumentChunk]) -> None:

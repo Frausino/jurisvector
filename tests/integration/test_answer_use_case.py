@@ -11,7 +11,9 @@ from __future__ import annotations
 from collections.abc import Sequence
 from uuid import UUID, uuid4
 
+import numpy as np
 import pytest
+from numpy.typing import NDArray
 
 from docuvector.application.answer_use_case import AnswerUseCase, AskInput
 from docuvector.application.retrieval_use_case import RetrievalUseCase
@@ -59,6 +61,13 @@ class _StaticVectorStore:
 
     def search(self, *_args, **_kwargs) -> Sequence[RetrievedChunk]:  # type: ignore[no-untyped-def]
         return self._chunks_to_return
+
+    def get_vectors_for_document(
+        self,
+        owner_id: UUID,
+        document_id: UUID,
+    ) -> NDArray[np.float32]:
+        return np.empty((0, 0), dtype=np.float32)
 
     def delete_document(self, _owner_id: UUID, _document_id: UUID) -> int:
         raise NotImplementedError
