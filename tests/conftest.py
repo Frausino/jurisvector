@@ -29,6 +29,7 @@ Decisões arquiteturais documentadas neste módulo:
 from __future__ import annotations
 
 import os
+import tempfile
 from collections.abc import Iterator
 from typing import TYPE_CHECKING
 
@@ -99,7 +100,9 @@ def _set_test_environment() -> None:
     os.environ.setdefault("SENTENCE_TRANSFORMERS_MODEL", "intfloat/multilingual-e5-small")
     os.environ.setdefault("SENTENCE_TRANSFORMERS_DIMENSIONS", "384")
     os.environ.setdefault("HF_HOME", "./data/test_hf_cache")
-    os.environ.setdefault("CHROMA_PERSIST_DIR", "./data/test_chroma")
+    os.environ["CHROMA_PERSIST_DIR"] = tempfile.mkdtemp(
+        prefix="docuvector_chroma_",
+    )
 
     os.environ.setdefault("OPENAI_LLM_MODEL", "gpt-4o-mini")
     os.environ.setdefault("OPENAI_LLM_TEMPERATURE", "0.2")

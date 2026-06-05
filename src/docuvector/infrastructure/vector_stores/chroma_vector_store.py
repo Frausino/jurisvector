@@ -135,6 +135,7 @@ class ChromaVectorStore:
                 {"document_id": {"$eq": str(document_id)}},
             ]
         }
+
         try:
             result = self._collection.get(
                 where=where_clause,
@@ -146,13 +147,22 @@ class ChromaVectorStore:
             ) from chroma_failure
 
         raw_embeddings = result.get("embeddings")
-        if not raw_embeddings:
+
+        if raw_embeddings is None:
             raise VectorStoreError(
                 f"Documento {document_id} não possui vetores indexados "
                 f"ou não pertence ao owner {owner_id}."
             )
 
-        return np.array(raw_embeddings, dtype=np.float32)
+        embeddings = np.asarray(raw_embeddings, dtype=np.float32)
+
+        if embeddings.size == 0:
+            raise VectorStoreError(
+                f"Documento {document_id} não possui vetores indexados "
+                f"ou não pertence ao owner {owner_id}."
+            )
+
+        return embeddings
 
     def delete_document(self, owner_id: UUID, document_id: UUID) -> int:
         """Apaga chunks de um documento, mantendo isolamento por dono."""
