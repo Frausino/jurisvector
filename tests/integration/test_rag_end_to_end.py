@@ -29,14 +29,9 @@ from __future__ import annotations
 
 import io
 import os
-import shutil
-from collections.abc import Iterator
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
-
-from docuvector.api import deps
 
 if TYPE_CHECKING:
     from fastapi.testclient import TestClient
@@ -72,23 +67,6 @@ de R$ 5.000,00 (cinco mil reais), até o quinto dia útil de cada mês.
 # =============================================================
 # Fixtures locais ao teste
 # =============================================================
-@pytest.fixture
-def clean_chroma_dir() -> Iterator[None]:
-    """Garante que cada run começa com Chroma vazio.
-
-    `get_vector_store` é `@lru_cache`; precisamos limpar o cache para
-    forçar reabertura quando o diretório é recriado.
-    """
-    chroma_path = Path(os.environ.get("CHROMA_PERSIST_DIR", "./data/test_chroma"))
-    if chroma_path.exists():
-        shutil.rmtree(chroma_path, ignore_errors=True)
-    chroma_path.mkdir(parents=True, exist_ok=True)
-
-    deps.get_vector_store.cache_clear()
-    yield
-    deps.get_vector_store.cache_clear()
-    if chroma_path.exists():
-        shutil.rmtree(chroma_path, ignore_errors=True)
 
 
 def _login(test_client: TestClient, email: str, password: str) -> str:
@@ -112,7 +90,6 @@ def _bearer(token: str) -> dict[str, str]:
 def test_upload_then_ask_with_mock_provider_returns_answer_with_sources(
     client: TestClient,
     regular_user_one: User,
-    clean_chroma_dir: None,
 ) -> None:
     """upload → ask com llm_provider=mock → resposta com fontes e grounded=True."""
     token = _login(

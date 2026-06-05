@@ -19,7 +19,11 @@ from docuvector.application.compression_benchmark_use_case import (
     CompressionBenchmarkUseCase,
 )
 from docuvector.application.document_crud_use_case import DocumentCrudUseCase
+from docuvector.application.embedding_benchmark_use_case import (
+    EmbeddingBenchmarkUseCase,
+)
 from docuvector.application.ingestion_use_case import IngestionUseCase
+from docuvector.application.metrics_use_case import MetricsUseCase
 from docuvector.application.register_user_use_case import RegisterUserUseCase
 from docuvector.application.retrieval_use_case import RetrievalUseCase
 from docuvector.config.settings import Settings, get_settings
@@ -255,12 +259,6 @@ def provide_compression_benchmark_use_case(
     session: SessionDependency,
     vector_store: VectorStoreDependency,
 ) -> CompressionBenchmarkUseCase:
-    """Constrói o use case de benchmark reutilizando o VectorStore singleton.
-
-    Usa `VectorStoreDependency` (já existe no deps.py) para não criar
-    uma segunda instância do Chroma por request — o ChromaVectorStore
-    é caro de construir (abre conexão com o banco de vetores).
-    """
     return CompressionBenchmarkUseCase(
         document_repository=SqlAlchemyDocumentRepository(session),
         vector_store=vector_store,
@@ -273,6 +271,32 @@ def provide_compression_benchmark_use_case(
 CompressionBenchmarkUseCaseDependency = Annotated[
     CompressionBenchmarkUseCase,
     Depends(provide_compression_benchmark_use_case),
+]
+
+
+def provide_embedding_benchmark_use_case(
+    settings: SettingsDependency,
+) -> EmbeddingBenchmarkUseCase:
+    return EmbeddingBenchmarkUseCase(
+        audit_repository=SqlAlchemyAuditRepository(get_session_factory()),
+        settings=settings,
+    )
+
+
+EmbeddingBenchmarkUseCaseDependency = Annotated[
+    EmbeddingBenchmarkUseCase,
+    Depends(provide_embedding_benchmark_use_case),
+]
+
+
+def provide_metrics_use_case() -> MetricsUseCase:
+    """Métricas usam session factory diretamente (queries de leitura)."""
+    return MetricsUseCase(session_factory=get_session_factory())
+
+
+MetricsUseCaseDependency = Annotated[
+    MetricsUseCase,
+    Depends(provide_metrics_use_case),
 ]
 
 

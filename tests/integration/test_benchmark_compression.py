@@ -18,14 +18,10 @@ from __future__ import annotations
 
 import io
 import os
-import shutil
-from collections.abc import Iterator
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
 
-from docuvector.api import deps
 from docuvector.domain.enums import CompressionMethod
 
 if TYPE_CHECKING:
@@ -70,18 +66,6 @@ em razão deste contrato, sob pena de responder por perdas e danos.
 # ---------------------------------------------------------------
 # Fixtures locais
 # ---------------------------------------------------------------
-@pytest.fixture
-def clean_chroma_dir() -> Iterator[None]:
-    """Isola cada teste com um Chroma vazio. Padrão do projeto."""
-    chroma_path = Path(os.environ.get("CHROMA_PERSIST_DIR", "./data/test_chroma"))
-    if chroma_path.exists():
-        shutil.rmtree(chroma_path, ignore_errors=True)
-    chroma_path.mkdir(parents=True, exist_ok=True)
-    deps.get_vector_store.cache_clear()
-    yield
-    deps.get_vector_store.cache_clear()
-    if chroma_path.exists():
-        shutil.rmtree(chroma_path, ignore_errors=True)
 
 
 # ---------------------------------------------------------------
@@ -128,7 +112,6 @@ def _upload_contract(client: TestClient, token: str) -> str:
 def test_benchmark_retorna_quatro_compressores(
     client: TestClient,
     regular_user_one: User,
-    clean_chroma_dir: None,
 ) -> None:
     token = _login(client, regular_user_one.email, os.environ["TEST_USER_ONE_PASSWORD"])
     doc_id = _upload_contract(client, token)
@@ -148,7 +131,6 @@ def test_benchmark_retorna_quatro_compressores(
 def test_benchmark_resultados_ordenados_por_retention_desc(
     client: TestClient,
     regular_user_one: User,
-    clean_chroma_dir: None,
 ) -> None:
     token = _login(client, regular_user_one.email, os.environ["TEST_USER_ONE_PASSWORD"])
     doc_id = _upload_contract(client, token)
@@ -169,7 +151,6 @@ def test_benchmark_resultados_ordenados_por_retention_desc(
 def test_benchmark_savings_pct_positivo(
     client: TestClient,
     regular_user_one: User,
-    clean_chroma_dir: None,
 ) -> None:
     token = _login(client, regular_user_one.email, os.environ["TEST_USER_ONE_PASSWORD"])
     doc_id = _upload_contract(client, token)
@@ -189,7 +170,6 @@ def test_benchmark_savings_pct_positivo(
 def test_benchmark_best_method_valido(
     client: TestClient,
     regular_user_one: User,
-    clean_chroma_dir: None,
 ) -> None:
     token = _login(client, regular_user_one.email, os.environ["TEST_USER_ONE_PASSWORD"])
     doc_id = _upload_contract(client, token)
@@ -210,7 +190,6 @@ def test_benchmark_best_method_valido(
 def test_benchmark_retention_em_range_valido(
     client: TestClient,
     regular_user_one: User,
-    clean_chroma_dir: None,
 ) -> None:
     token = _login(client, regular_user_one.email, os.environ["TEST_USER_ONE_PASSWORD"])
     doc_id = _upload_contract(client, token)
@@ -245,7 +224,6 @@ def test_benchmark_bola_usuario_dois_recebe_404(
     client: TestClient,
     regular_user_one: User,
     regular_user_two: User,
-    clean_chroma_dir: None,
 ) -> None:
     """BOLA: usuário 2 não deve acessar doc do usuário 1 — recebe 404 (RGN-10)."""
     token_one = _login(client, regular_user_one.email, os.environ["TEST_USER_ONE_PASSWORD"])
