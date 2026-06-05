@@ -193,6 +193,15 @@ class Settings(BaseSettings):
         description="Limite de tentativas de auto-cadastro por IP/minuto.",
     )
 
+    # Taxa de câmbio USD → BRL usada no dashboard de KPIs.
+    # Atualizável via variável de ambiente sem redeploy.
+    usd_to_brl_rate: float = Field(
+        default=5.70,
+        ge=0.01,
+        alias="USD_TO_BRL_RATE",
+        description="Taxa de câmbio USD/BRL para estimativas de custo no dashboard.",
+    )
+
     # Piso de latência mínima do POST /register (em segundos). Precisa
     # ser MAIOR que o tempo de um bcrypt no cost de produção para o
     # timing equalizer fazer efeito.
