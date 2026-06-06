@@ -1,0 +1,20 @@
+/* DocuVector Lite — estilos complementares ao Tailwind CDN */
+
+/* HTMX: indicadores */
+.htmx-indicator { display: none; }
+.htmx-request .htmx-indicator,
+.htmx-request.htmx-indicator { display: inline; }
+.htmx-request .ask-label,
+.htmx-request .upload-label,
+.htmx-request .embed-label { display: none; }
+
+/* Truncamento multilinha */
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Scroll suave no histórico de chat */
+#chat-history { scroll-behavior: smooth; }

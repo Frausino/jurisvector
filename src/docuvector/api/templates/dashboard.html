@@ -1,0 +1,249 @@
+{% extends "base.html" %}
+{% block title %}Métricas · DocuVector Lite{% endblock %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto px-4 py-6">
+
+  <!-- Cabeçalho -->
+  <div class="mb-6 flex items-center justify-between">
+    <div>
+      <h1 class="text-2xl font-semibold text-slate-900">Métricas operacionais</h1>
+      <p class="text-sm text-slate-500 mt-1">Custo, latência, compressão e economia do seu corpus.</p>
+    </div>
+    <!-- Filtro de provider (client-side) -->
+    <div class="flex items-center gap-2 text-sm">
+      <label class="text-xs text-slate-500">Filtrar provider:</label>
+      <select id="filter-provider"
+              onchange="filterByProvider(this.value)"
+              class="text-xs border border-slate-300 rounded px-2 py-1.5 bg-white">
+        <option value="all">Todos</option>
+        {% for stat in metrics.llm_stats %}
+        <option value="{{ stat.provider }}">{{ stat.provider }}</option>
+        {% endfor %}
+      </select>
+    </div>
+  </div>
+
+  <!-- Cards de resumo -->
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <div class="bg-white rounded-lg border border-slate-200 p-4">
+      <p class="text-xs text-slate-500 uppercase tracking-wide">Consultas</p>
+      <p class="text-2xl font-bold text-slate-900 mt-1">{{ metrics.total_queries }}</p>
+    </div>
+    <div class="bg-white rounded-lg border border-slate-200 p-4">
+      <p class="text-xs text-slate-500 uppercase tracking-wide">Custo total</p>
+      <p class="text-2xl font-bold text-slate-900 mt-1">US$ {{ "%.4f"|format(metrics.total_cost_usd) }}</p>
+    </div>
+    <div class="bg-white rounded-lg border border-slate-200 p-4">
+      <p class="text-xs text-slate-500 uppercase tracking-wide">Custo (R$)</p>
+      <p class="text-2xl font-bold text-slate-900 mt-1">R$ {{ "%.2f"|format(metrics.total_cost_brl) }}</p>
+    </div>
+    <div class="bg-white rounded-lg border border-slate-200 p-4">
+      <p class="text-xs text-slate-500 uppercase tracking-wide">Documentos</p>
+      <p class="text-2xl font-bold text-slate-900 mt-1">{{ metrics.document_stats.total }}</p>
+      <p class="text-xs text-slate-400 mt-1">
+        {{ metrics.document_stats.embedded }} indexados · {{ metrics.document_stats.failed }} falhas
+      </p>
+    </div>
+  </div>
+
+  <!-- Grid principal -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+
+    <!-- Tabela de providers LLM com filtro -->
+    <div class="bg-white rounded-lg border border-slate-200 overflow-hidden">
+      <div class="px-4 py-3 border-b border-slate-100">
+        <h2 class="font-medium text-slate-900 text-sm">Latência e custo por modelo</h2>
+      </div>
+      {% if metrics.llm_stats %}
+      <table class="w-full text-sm" id="llm-table">
+        <thead class="bg-slate-50 text-slate-500 text-xs text-left">
+          <tr>
+            <th class="px-4 py-2.5 font-medium">Provider</th>
+            <th class="px-4 py-2.5 font-medium text-right">Chamadas</th>
+            <th class="px-4 py-2.5 font-medium text-right">Média</th>
+            <th class="px-4 py-2.5 font-medium text-right">p95</th>
+            <th class="px-4 py-2.5 font-medium text-right">Tokens</th>
+            <th class="px-4 py-2.5 font-medium text-right">Custo</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          {% for stat in metrics.llm_stats %}
+          <tr class="hover:bg-slate-50 provider-row" data-provider="{{ stat.provider }}">
+            <td class="px-4 py-2.5">
+              <span class="inline-flex items-center gap-1.5">
+                <span class="w-2 h-2 rounded-full
+                  {% if stat.provider == 'openai' %}bg-green-500
+                  {% elif stat.provider == 'ollama' %}bg-blue-500
+                  {% else %}bg-slate-400{% endif %}"></span>
+                <span class="font-medium text-slate-800">{{ stat.provider }}</span>
+              </span>
+            </td>
+            <td class="px-4 py-2.5 text-right text-slate-600">{{ stat.total_calls }}</td>
+            <td class="px-4 py-2.5 text-right text-slate-600">{{ "%.0f"|format(stat.avg_latency_ms) }} ms</td>
+            <td class="px-4 py-2.5 text-right text-slate-600">{{ "%.0f"|format(stat.p95_latency_ms) }} ms</td>
+            <td class="px-4 py-2.5 text-right text-slate-600">{{ stat.total_tokens }}</td>
+            <td class="px-4 py-2.5 text-right text-slate-600">US$ {{ "%.5f"|format(stat.total_cost_usd) }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="px-4 py-8 text-center text-slate-400 text-sm">Nenhuma consulta registrada.</div>
+      {% endif %}
+    </div>
+
+    <!-- Retenção semântica por compressor -->
+    <div class="bg-white rounded-lg border border-slate-200 overflow-hidden">
+      <div class="px-4 py-3 border-b border-slate-100">
+        <h2 class="font-medium text-slate-900 text-sm">Retenção semântica por compressor</h2>
+      </div>
+      {% if metrics.compression_stats %}
+      <div class="divide-y divide-slate-100">
+        {% for stat in metrics.compression_stats %}
+        <div class="px-4 py-3">
+          <div class="flex items-center justify-between mb-1.5">
+            <span class="text-sm font-medium text-slate-800">{{ stat.method }}</span>
+            <div class="flex items-center gap-3 text-xs text-slate-500">
+              <span class="text-green-700 font-semibold">-{{ stat.avg_space_savings_pct | round(1) }}% bytes</span>
+              <span>{{ (stat.avg_semantic_retention * 100) | round(1) }}% semântica</span>
+            </div>
+          </div>
+          <div class="h-1.5 rounded-full bg-slate-100">
+            <div class="h-1.5 rounded-full bg-blue-500"
+                 style="width: {{ (stat.avg_semantic_retention * 100) | round(0) | int }}%"></div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="px-4 py-8 text-center text-slate-400 text-sm">
+        Nenhum benchmark de compressão executado.<br>
+        <span class="text-xs mt-1 block text-slate-300">Use o botão § na sidebar de documentos.</span>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Economia de armazenamento -->
+  {% if metrics.storage_savings %}
+  {% set s = metrics.storage_savings %}
+  <div class="bg-white rounded-lg border border-slate-200 p-5 mb-6">
+    <h2 class="font-medium text-slate-900 text-sm mb-4">Economia de armazenamento estimada</h2>
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm mb-4">
+      <div>
+        <p class="text-xs text-slate-500">Melhor compressor</p>
+        <p class="font-semibold text-purple-700 mt-1">{{ s.best_method }}</p>
+      </div>
+      <div>
+        <p class="text-xs text-slate-500">Economia de bytes</p>
+        <p class="font-semibold text-green-700 mt-1">{{ "%.1f"|format(s.savings_pct) }}%</p>
+      </div>
+      <div>
+        <p class="text-xs text-slate-500">Original</p>
+        <p class="font-semibold text-slate-800 mt-1">{{ "%.3f"|format(s.original_storage_mb) }} MB</p>
+      </div>
+      <div>
+        <p class="text-xs text-slate-500">Comprimido</p>
+        <p class="font-semibold text-slate-800 mt-1">{{ "%.3f"|format(s.compressed_storage_mb) }} MB</p>
+      </div>
+    </div>
+    <!-- Barra visual de economia -->
+    <div class="mb-4">
+      <div class="flex items-center justify-between text-xs text-slate-500 mb-1">
+        <span>Armazenamento</span>
+        <span>{{ "%.1f"|format(s.savings_pct) }}% economizado com {{ s.best_method }}</span>
+      </div>
+      <div class="h-3 rounded-full bg-slate-100 overflow-hidden flex">
+        <div class="h-3 bg-green-400 rounded-l-full"
+             style="width: {{ 100 - s.savings_pct | round(0) | int }}%"></div>
+        <div class="h-3 bg-slate-200 rounded-r-full flex-1"></div>
+      </div>
+      <div class="flex justify-between text-[10px] text-slate-400 mt-0.5">
+        <span>Comprimido</span>
+        <span>Economia</span>
+      </div>
+    </div>
+    <!-- Estimativas de custo Pinecone vs Qdrant -->
+    <div class="grid grid-cols-2 gap-4 pt-4 border-t border-slate-100">
+      <div class="bg-slate-50 rounded-lg p-3">
+        <p class="text-xs font-medium text-slate-600 mb-2">Pinecone Serverless</p>
+        <div class="space-y-1 text-xs">
+          <div class="flex justify-between">
+            <span class="text-slate-500">Original</span>
+            <span>US$ {{ "%.4f"|format(s.pinecone_original_usd) }}/mês</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-slate-500">Comprimido</span>
+            <span>US$ {{ "%.4f"|format(s.pinecone_compressed_usd) }}/mês</span>
+          </div>
+          <div class="flex justify-between font-medium text-green-700 pt-1 border-t border-slate-200">
+            <span>Economia</span>
+            <span>R$ {{ "%.2f"|format(s.pinecone_savings_brl) }}/mês</span>
+          </div>
+        </div>
+      </div>
+      <div class="bg-slate-50 rounded-lg p-3">
+        <p class="text-xs font-medium text-slate-600 mb-2">Qdrant Cloud</p>
+        <div class="space-y-1 text-xs">
+          <div class="flex justify-between">
+            <span class="text-slate-500">Original</span>
+            <span>US$ {{ "%.4f"|format(s.qdrant_original_usd) }}/mês</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-slate-500">Comprimido</span>
+            <span>US$ {{ "%.4f"|format(s.qdrant_compressed_usd) }}/mês</span>
+          </div>
+          <div class="flex justify-between font-medium text-green-700 pt-1 border-t border-slate-200">
+            <span>Economia</span>
+            <span>R$ {{ "%.2f"|format(s.qdrant_savings_brl) }}/mês</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Benchmark de embedding -->
+  <div class="bg-white rounded-lg border border-slate-200 p-5">
+    <div class="flex items-center justify-between mb-4">
+      <div>
+        <h2 class="font-medium text-slate-900 text-sm">Benchmark de provedores de embedding</h2>
+        <p class="text-xs text-slate-500 mt-0.5">Compare latência e custo de vetorização entre os modelos disponíveis.</p>
+      </div>
+    </div>
+    <form hx-post="/app/dashboard/benchmark-embedders"
+          hx-target="#embedding-result"
+          hx-swap="innerHTML"
+          hx-indicator="#embed-spinner"
+          class="flex gap-3 items-end mb-4">
+      <div class="flex-1">
+        <label class="block text-xs font-medium text-slate-600 mb-1">Texto de consulta para vetorizar</label>
+        <input type="text" name="query" required minlength="3"
+               placeholder="Qual o prazo de rescisão do contrato?"
+               class="w-full px-3 py-2 text-sm border border-slate-300 rounded
+                      focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
+      </div>
+      <button type="submit"
+              class="flex-shrink-0 bg-slate-800 text-white px-4 py-2 rounded text-sm hover:bg-slate-900 transition">
+        <span id="embed-spinner" class="htmx-indicator text-xs">Aguarde...</span>
+        <span class="embed-label">Comparar</span>
+      </button>
+    </form>
+    <div id="embedding-result"></div>
+  </div>
+
+</div>
+
+<script>
+  function filterByProvider(provider) {
+    document.querySelectorAll('.provider-row').forEach(function(row) {
+      if (provider === 'all' || row.dataset.provider === provider) {
+        row.style.display = '';
+      } else {
+        row.style.display = 'none';
+      }
+    });
+  }
+</script>
+{% endblock %}

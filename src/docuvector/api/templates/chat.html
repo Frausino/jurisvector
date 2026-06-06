@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+{% block title %}Consulta · DocuVector Lite{% endblock %}
+
+{% block content %}
+<div class="flex flex-1 min-h-0 h-[calc(100vh-44px)]">
+
+  <!-- ── Sidebar esquerda ── -->
+  <aside class="w-72 flex-shrink-0 bg-white border-r border-slate-200 flex flex-col overflow-hidden">
+
+    <!-- Upload -->
+    <div class="p-3 border-b border-slate-100 bg-slate-50">
+      <p class="text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">Enviar documento</p>
+      <form hx-post="/app/chat/upload"
+            hx-target="#sidebar-docs"
+            hx-swap="innerHTML"
+            hx-encoding="multipart/form-data"
+            hx-indicator="#upload-indicator"
+            class="space-y-2">
+        <input type="file" name="file" required accept=".pdf,.txt"
+               class="w-full text-xs border border-slate-200 rounded px-2 py-1.5 bg-white
+                      file:mr-2 file:py-1 file:px-2 file:rounded file:border-0
+                      file:text-xs file:bg-blue-50 file:text-blue-700">
+        <div class="flex gap-2">
+          <select name="embedding_provider"
+                  class="flex-1 text-xs border border-slate-200 rounded px-2 py-1.5 bg-white">
+            {% for p in embedding_providers %}
+            <option value="{{ p }}">{{ p.replace('_',' ') }}</option>
+            {% endfor %}
+          </select>
+          <button type="submit"
+                  class="px-3 py-1.5 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 transition">
+            <span id="upload-indicator" class="htmx-indicator">...</span>
+            <span class="upload-label">Indexar</span>
+          </button>
+        </div>
+      </form>
+    </div>
+
+    <!-- Documentos -->
+    <div class="flex-1 overflow-y-auto" id="sidebar-docs">
+      {% include "partials/sidebar_docs.html" %}
+    </div>
+
+  </aside>
+
+  <!-- ── Área de chat ── -->
+  <div class="flex-1 flex flex-col min-w-0">
+
+    <!-- Config topo -->
+    <div class="bg-white border-b border-slate-200 px-4 py-2 flex items-center gap-4 text-sm flex-shrink-0">
+      <span class="text-xs text-slate-400 font-medium uppercase tracking-wide">Modelo</span>
+      <div class="flex items-center gap-2">
+        <label class="text-xs text-slate-500">Embedding</label>
+        <select id="sel-embedding"
+                class="text-xs border border-slate-200 rounded px-2 py-1 bg-white">
+          {% for p in embedding_providers %}
+          <option value="{{ p }}">{{ p.replace('_',' ') }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="flex items-center gap-2">
+        <label class="text-xs text-slate-500">LLM</label>
+        <select id="sel-llm"
+                class="text-xs border border-slate-200 rounded px-2 py-1 bg-white">
+          {% for p in llm_providers %}
+          <option value="{{ p }}" {% if p == default_llm %}selected{% endif %}>{{ p }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <button onclick="clearHistory()"
+              class="ml-auto text-xs text-slate-400 hover:text-slate-600 transition">
+        Limpar conversa
+      </button>
+    </div>
+
+    <!-- Histórico -->
+    <div id="chat-history"
+         class="flex-1 overflow-y-auto px-6 py-4 space-y-6 bg-slate-50">
+      <div id="chat-empty"
+           class="flex flex-col items-center justify-center h-full text-center text-slate-400 py-20">
+        <div class="text-5xl mb-3">§</div>
+        <p class="text-base font-medium text-slate-600">Consulta jurídica inteligente</p>
+        <p class="text-sm mt-1">Faça uma pergunta sobre os documentos indexados na sidebar.</p>
+      </div>
+    </div>
+
+    <!-- Input -->
+    <div class="bg-white border-t border-slate-200 px-4 py-3 flex-shrink-0">
+      <form id="ask-form"
+            hx-post="/app/chat/ask"
+            hx-target="#chat-history"
+            hx-swap="beforeend"
+            hx-indicator="#ask-spinner"
+            hx-on::after-request="afterAsk()"
+            class="flex gap-3 items-end">
+        <input type="hidden" name="embedding_provider" id="h-embedding">
+        <input type="hidden" name="llm_provider" id="h-llm">
+        <textarea id="query-input"
+                  name="query" required rows="1"
+                  placeholder="Qual o prazo de rescisão? Quais são as obrigações das partes?"
+                  class="flex-1 resize-none border border-slate-300 rounded-lg px-3 py-2.5
+                         text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none
+                         max-h-36 overflow-y-auto"
+                  onkeydown="handleEnter(event)"
+                  oninput="autoResize(this)"></textarea>
+        <button type="submit"
+                class="flex-shrink-0 bg-blue-600 text-white px-5 py-2.5 rounded-lg
+                       hover:bg-blue-700 transition text-sm font-medium min-w-[90px]">
+          <span id="ask-spinner" class="htmx-indicator text-xs">Aguarde...</span>
+          <span class="ask-label">Consultar</span>
+        </button>
+      </form>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  document.getElementById('ask-form').addEventListener('htmx:configRequest', function() {
+    document.getElementById('h-embedding').value = document.getElementById('sel-embedding').value;
+    document.getElementById('h-llm').value = document.getElementById('sel-llm').value;
+  });
+
+  function afterAsk() {
+    document.getElementById('query-input').value = '';
+    document.getElementById('query-input').style.height = 'auto';
+    const empty = document.getElementById('chat-empty');
+    if (empty) empty.remove();
+    const h = document.getElementById('chat-history');
+    h.scrollTop = h.scrollHeight;
+  }
+
+  function handleEnter(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      document.getElementById('ask-form').requestSubmit();
+    }
+  }
+
+  function autoResize(el) {
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 144) + 'px';
+  }
+
+  function clearHistory() {
+    document.getElementById('chat-history').innerHTML =
+      `<div id="chat-empty" class="flex flex-col items-center justify-center h-full text-center text-slate-400 py-20">
+        <div class="text-5xl mb-3">§</div>
+        <p class="text-base font-medium text-slate-600">Consulta jurídica inteligente</p>
+        <p class="text-sm mt-1">Faça uma pergunta sobre os documentos indexados na sidebar.</p>
+      </div>`;
+  }
+</script>
+{% endblock %}

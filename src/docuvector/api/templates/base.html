@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{% block title %}DocuVector Lite{% endblock %}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- pragma: allowlist secret -->
+    <script
+      src="https://unpkg.com/htmx.org@1.9.12"
+      integrity="sha384-ujb1lZYygJmzgSwoxRggbCHcjc0rB2XoQrxeTUQyRjrOnlCoYta87iKBWq3EsdM2" <!-- pragma: allowlist secret -->
+      crossorigin="anonymous"
+    ></script>
+    <link rel="stylesheet" href="/static/css/app.css" />
+  </head>
+  <body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
+    {% if user %}
+    <header
+      class="bg-slate-900 text-slate-100 shadow-sm border-b border-slate-800 z-10"
+    >
+      <nav
+        class="max-w-screen-xl mx-auto px-4 py-2.5 flex items-center justify-between"
+      >
+        <a
+          href="/app/chat"
+          class="flex items-center gap-2 font-semibold text-base"
+        >
+          <span class="text-blue-400 text-xl">§</span>
+          <span class="hidden sm:inline">DocuVector Lite</span>
+        </a>
+
+        <div class="flex items-center gap-1 text-sm">
+          <a
+            href="/app/chat"
+            class="px-3 py-1.5 rounded hover:bg-slate-700 transition {% if active_page == 'chat' %}bg-slate-700 text-white{% else %}text-slate-300{% endif %}"
+          >
+            Consulta
+          </a>
+          <a
+            href="/app/dashboard"
+            class="px-3 py-1.5 rounded hover:bg-slate-700 transition {% if active_page == 'dashboard' %}bg-slate-700 text-white{% else %}text-slate-300{% endif %}"
+          >
+            Métricas
+          </a>
+          {% if user.role.value == 'admin' %}
+          <a
+            href="/app/admin"
+            class="px-3 py-1.5 rounded hover:bg-amber-700 transition {% if active_page == 'admin' %}bg-amber-700 text-white{% else %}text-amber-400{% endif %}"
+          >
+            Admin
+          </a>
+          {% endif %}
+          <span class="mx-2 text-slate-600">|</span>
+          <span
+            class="text-slate-400 text-xs hidden md:inline max-w-[160px] truncate"
+            >{{ user.email }}</span
+          >
+          <a
+            href="/logout"
+            class="ml-1 px-3 py-1.5 rounded text-slate-300 hover:bg-red-800 hover:text-white transition"
+          >
+            Sair
+          </a>
+        </div>
+      </nav>
+    </header>
+    {% endif %}
+
+    <main class="flex-1 flex flex-col min-h-0">
+      {% block content %}{% endblock %}
+    </main>
+  </body>
+</html>

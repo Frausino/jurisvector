@@ -1,0 +1,48 @@
+{% if error %}
+<div class="px-4 py-3 rounded bg-red-50 border border-red-200 text-red-700 text-sm">
+  {{ error }}
+</div>
+
+{% elif result %}
+<div class="border border-slate-200 rounded-lg overflow-hidden">
+  <table class="w-full text-sm">
+    <thead class="bg-slate-50 text-slate-500 text-xs text-left">
+      <tr>
+        <th class="px-4 py-2.5 font-medium">Provider</th>
+        <th class="px-4 py-2.5 font-medium">Modelo</th>
+        <th class="px-4 py-2.5 font-medium text-right">Dims</th>
+        <th class="px-4 py-2.5 font-medium text-right">Latência</th>
+        <th class="px-4 py-2.5 font-medium text-right">Tamanho/vetor</th>
+        <th class="px-4 py-2.5 font-medium text-right">Custo/1M tokens</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-slate-100">
+      {% for r in result.results %}
+      <tr class="hover:bg-slate-50
+                 {% if r.provider_name.value == result.fastest_provider.value %}bg-blue-50{% endif %}">
+        <td class="px-4 py-2.5">
+          <span class="font-medium text-slate-800">{{ r.provider_name.value }}</span>
+          {% if r.provider_name.value == result.fastest_provider.value %}
+          <span class="ml-1 text-[10px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-700">mais rápido</span>
+          {% endif %}
+          {% if r.provider_name.value == result.cheapest_provider.value %}
+          <span class="ml-1 text-[10px] px-1.5 py-0.5 rounded bg-green-100 text-green-700">mais barato</span>
+          {% endif %}
+        </td>
+        <td class="px-4 py-2.5 text-slate-500 text-xs">{{ r.model_name }}</td>
+        <td class="px-4 py-2.5 text-right text-slate-600">{{ r.dimensions }}</td>
+        <td class="px-4 py-2.5 text-right text-slate-600">{{ r.latency_ms }} ms</td>
+        <td class="px-4 py-2.5 text-right text-slate-600">{{ r.vector_size_bytes }} B</td>
+        <td class="px-4 py-2.5 text-right">
+          {% if r.cost_usd_per_million_tokens == 0 %}
+          <span class="text-green-700 font-medium">US$ 0 (local)</span>
+          {% else %}
+          <span class="text-slate-600">US$ {{ "%.4f"|format(r.cost_usd_per_million_tokens) }}</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}

@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Documentos · DocuVector Lite{% endblock %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto px-4 py-8">
+  <div class="mb-6">
+    <h1 class="text-2xl font-semibold text-slate-900">Documentos jurídicos</h1>
+    <p class="text-sm text-slate-500 mt-1">
+      Contratos, petições e jurisprudência indexados para consulta semântica.
+    </p>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Upload -->
+    <div class="lg:col-span-1">
+      <div class="bg-white rounded-lg shadow-sm border border-slate-200 p-5">
+        <h2 class="font-medium text-slate-900 mb-3">Enviar documento</h2>
+        <form hx-post="/app/documents/upload"
+              hx-target="#document-list"
+              hx-swap="innerHTML"
+              hx-encoding="multipart/form-data"
+              hx-indicator="#upload-spinner"
+              class="space-y-3">
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Arquivo</label>
+            <input type="file" name="file" required accept=".pdf,.txt"
+                   class="w-full text-sm border border-slate-300 rounded px-2 py-2
+                          file:mr-3 file:py-1 file:px-3 file:rounded file:border-0
+                          file:bg-blue-50 file:text-blue-700">
+            <p class="text-xs text-slate-400 mt-1">PDF ou TXT.</p>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Modelo de embedding</label>
+            <select name="embedding_provider"
+                    class="w-full px-3 py-2 border border-slate-300 rounded text-sm">
+              {% for provider in embedding_providers %}
+              <option value="{{ provider }}">{{ provider }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <button type="submit"
+                  class="w-full bg-blue-600 text-white py-2 rounded font-medium hover:bg-blue-700 transition">
+            <span id="upload-spinner" class="htmx-indicator">Processando...</span>
+            <span class="[.htmx-request_&]:hidden">Enviar e indexar</span>
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Lista -->
+    <div class="lg:col-span-2">
+      <div id="document-list">
+        {% include "partials/document_list.html" %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

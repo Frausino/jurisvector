@@ -303,11 +303,38 @@ MetricsUseCaseDependency = Annotated[
 # =============================================================
 # Autenticação via esquema Bearer (HTTPBearer)
 # =============================================================
+# Nome do cookie HttpOnly usado pela camada web (Sprint 5).
+# A API REST continua aceitando Authorization: Bearer normalmente;
+# o cookie é uma fonte adicional de token para o frontend server-side,
+# que não expõe o JWT ao JavaScript (defesa contra XSS).
+SESSION_COOKIE_NAME = "access_token"
+
+
+def _extract_token(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials | None,
+) -> str | None:
+    """Extrai o token JWT do header Authorization ou, como fallback, do cookie.
+
+    Precedência: header Authorization (clientes de API, Swagger) tem
+    prioridade. Cookie HttpOnly atende o frontend web sem expor o token
+    ao JS. Um cliente nunca mistura os dois na mesma request.
+    """
+    if credentials is not None and credentials.credentials:
+        return credentials.credentials
+    cookie_token = request.cookies.get(SESSION_COOKIE_NAME)
+    if cookie_token:
+        return cookie_token
+    return None
+
+
 def require_authenticated_user(
+    request: Request,
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer_scheme)],
     token_service: TokenServiceDependency,
 ) -> TokenPayload:
-    if credentials is None or not credentials.credentials:
+    token = _extract_token(request, credentials)
+    if token is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Não autenticado.",
@@ -315,7 +342,7 @@ def require_authenticated_user(
         )
 
     try:
-        return token_service.verify(credentials.credentials)
+        return token_service.verify(token)
     except AuthenticationError as authentication_failure:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

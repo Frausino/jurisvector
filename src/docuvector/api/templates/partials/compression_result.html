@@ -1,0 +1,46 @@
+{% if error %}
+<div class="mt-1 px-2 py-1.5 rounded bg-red-50 border border-red-200 text-red-700 text-[10px]">
+  {{ error }}
+</div>
+
+{% elif results %}
+<div class="mt-2 rounded-lg border border-purple-200 bg-purple-50 overflow-hidden">
+  <div class="px-3 py-1.5 bg-purple-100 border-b border-purple-200">
+    <p class="text-[10px] font-medium text-purple-700 uppercase tracking-wide">Benchmark de compressão</p>
+  </div>
+  <div class="divide-y divide-purple-100">
+    {% for r in results %}
+    <div class="px-3 py-2">
+      <div class="flex items-center justify-between mb-1">
+        <span class="text-[10px] font-medium text-slate-700">{{ r.method.value }}</span>
+        <span class="text-[10px] font-semibold
+                     {% if r.semantic_retention >= 0.95 %}text-green-700
+                     {% elif r.semantic_retention >= 0.85 %}text-amber-700
+                     {% else %}text-red-700{% endif %}">
+          {{ (r.semantic_retention * 100) | round(1) }}% retenção
+        </span>
+      </div>
+      <!-- Barra de retenção semântica -->
+      <div class="h-1 rounded-full bg-slate-200 mb-1.5">
+        <div class="h-1 rounded-full
+                    {% if r.semantic_retention >= 0.95 %}bg-green-500
+                    {% elif r.semantic_retention >= 0.85 %}bg-amber-500
+                    {% else %}bg-red-500{% endif %}"
+             style="width: {{ (r.semantic_retention * 100) | round(0) | int }}%"></div>
+      </div>
+      <div class="flex gap-3 text-[10px] text-slate-500">
+        <span>{{ r.original_dim }}→{{ r.compressed_dim }} dims</span>
+        <span class="text-green-700 font-medium">-{{ r.space_savings_pct | round(0) | int }}% bytes</span>
+        <span>{{ r.fit_time_ms + r.transform_time_ms }} ms</span>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  <div class="px-3 py-1.5 bg-purple-100 border-t border-purple-200">
+    <p class="text-[10px] text-purple-600">
+      Melhor: <strong>{{ results[0].method.value }}</strong>
+      · Economia: <strong>{{ results[0].space_savings_pct | round(1) }}%</strong>
+    </p>
+  </div>
+</div>
+{% endif %}

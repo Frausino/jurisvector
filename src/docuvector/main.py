@@ -8,10 +8,12 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from slowapi.errors import RateLimitExceeded
 
 from docuvector import __version__
@@ -22,6 +24,7 @@ from docuvector.api.routers import documents as documents_router
 from docuvector.api.routers import health
 from docuvector.api.routers import metrics as metrics_router
 from docuvector.api.routers import queries as queries_router
+from docuvector.api.web import router as web_router
 from docuvector.config.settings import Settings, get_settings
 from docuvector.domain.exceptions import (
     AuthenticationError,
@@ -116,6 +119,16 @@ def create_app() -> FastAPI:
     fastapi_app.include_router(admin_users_router.router)
     fastapi_app.include_router(queries_router.router)
     fastapi_app.include_router(metrics_router.router)
+
+    # Camada web (server-side rendering). Registrada por último para
+    # que as rotas de API tenham precedência na resolução.
+    _static_dir = Path(__file__).resolve().parent / "api" / "static"
+    fastapi_app.mount(
+        "/static",
+        StaticFiles(directory=str(_static_dir)),
+        name="static",
+    )
+    fastapi_app.include_router(web_router)
 
     return fastapi_app
 
