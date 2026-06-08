@@ -1,0 +1,378 @@
+{% extends "base.html" %}
+{% block title %}Consulta · JurisVector{% endblock %}
+
+{% block content %}
+<div class="flex flex-1 min-h-0 h-[calc(100vh-48px)]">
+
+  <!-- ── Sidebar ── -->
+  <aside class="w-72 flex-shrink-0 bg-white border-r border-slate-200 flex flex-col shadow-sm">
+    <!-- Upload -->
+    <div class="p-4 border-b border-slate-100 bg-slate-50/80">
+      <p class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2.5">Enviar documento</p>
+      <form hx-post="/app/chat/upload"
+            hx-target="#sidebar-docs"
+            hx-swap="innerHTML"
+            hx-encoding="multipart/form-data"
+            hx-indicator="#upload-indicator"
+            class="space-y-2">
+        <input type="file" name="file" required accept=".pdf,.txt"
+               class="w-full text-xs border border-slate-200 rounded-lg px-2 py-2 bg-white cursor-pointer
+                      file:mr-2 file:py-1 file:px-3 file:rounded-md file:border-0
+                      file:text-xs file:bg-juris-600 file:text-white file:font-medium
+                      hover:file:bg-juris-700">
+        <div class="flex gap-2">
+          <select name="embedding_provider"
+                  class="flex-1 text-xs border border-slate-200 rounded-lg px-2 py-2 bg-white text-slate-700">
+            {% for p in embedding_providers %}
+            <option value="{{ p }}">{{ p.replace('_',' ') }}</option>
+            {% endfor %}
+          </select>
+          <button type="submit"
+                  class="px-3 py-2 bg-juris-600 text-white text-xs rounded-lg hover:bg-juris-700 transition font-medium">
+            <span id="upload-indicator" class="htmx-indicator">…</span>
+            <span class="upload-label">Indexar</span>
+          </button>
+        </div>
+      </form>
+    </div>
+    <!-- Documentos -->
+    <div class="flex-1 overflow-y-auto" id="sidebar-docs">
+      {% include "partials/sidebar_docs.html" %}
+    </div>
+  </aside>
+
+  <!-- ── Área principal ── -->
+  <div class="flex-1 flex flex-col min-w-0 bg-slate-50">
+
+    <!-- Barra de configuração -->
+    <div class="bg-white border-b border-slate-200 px-4 py-2 flex items-center gap-3 flex-shrink-0 shadow-sm">
+      <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Modelo</span>
+
+      <select id="sel-embedding"
+              class="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-slate-700">
+        {% for p in embedding_providers %}
+        <option value="{{ p }}">{{ p.replace('_',' ') }}</option>
+        {% endfor %}
+      </select>
+
+      <select id="sel-llm"
+              class="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-slate-700">
+        {% for p in llm_providers %}
+        <option value="{{ p }}" {% if p == default_llm %}selected{% endif %}>{{ p }}</option>
+        {% endfor %}
+      </select>
+
+      <div class="h-4 w-px bg-slate-200"></div>
+
+      <!-- Seletor de coleção com badge -->
+      <div class="flex items-center gap-2">
+        <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Coleção</span>
+        <select id="sel-collection" onchange="updateCollectionBadge()"
+                class="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-slate-700">
+          <option value="original"      data-badge="baseline"   data-color="blue">Original (float32)</option>
+          <option value="int8"          data-badge="-75% bytes" data-color="green"  data-compressed="true">Int8</option>
+          <option value="binary"        data-badge="-97% bytes" data-color="purple" data-compressed="true">Binary</option>
+          <option value="random_projection" data-badge="-50% dims" data-color="amber"  data-compressed="true">Random Projection</option>
+          <option value="pca"           data-badge="-50% dims"  data-color="slate"  data-compressed="true">PCA</option>
+        </select>
+        <span id="collection-badge"
+              class="text-[9px] px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-semibold">
+          baseline
+        </span>
+      </div>
+
+      <!-- Aviso: colecao comprimida sem dados indexados -->
+      <div id="collection-warning" class="hidden text-[10px] text-amber-600 bg-amber-50
+                border border-amber-200 rounded-lg px-2.5 py-1 flex items-center gap-1.5">
+        <svg class="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+        </svg>
+        <span id="collection-warning-text">Comprima um documento antes de consultar esta colecao.</span>
+      </div>
+
+      <div class="ml-auto flex items-center gap-2">
+        <button onclick="toggleAB()"
+                class="text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600
+                       hover:border-juris-300 hover:text-juris-700 hover:bg-juris-50 transition font-medium">
+          ⚡ A/B Compare
+        </button>
+        <button onclick="toggleComparePanel()"
+                class="text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600
+                       hover:border-slate-300 transition">
+          ⚖ Coleções
+        </button>
+        <button onclick="clearHistory()"
+                class="text-xs text-slate-400 hover:text-slate-600 transition">
+          Limpar
+        </button>
+      </div>
+    </div>
+
+    <!-- Painel A/B -->
+    <div id="ab-panel" class="hidden border-b border-juris-100 bg-juris-50/60 px-4 py-3 flex-shrink-0">
+      <div class="flex items-center gap-2 mb-2">
+        <span class="text-xs font-semibold text-juris-800">⚡ Comparação A/B de respostas</span>
+        <span class="text-[10px] text-slate-400">Mesmo prompt · Dois espaços vetoriais · Respostas lado a lado</span>
+      </div>
+      <form hx-post="/app/chat/compare-answer"
+            hx-target="#ab-result"
+            hx-swap="innerHTML"
+            hx-indicator="#ab-spinner"
+            class="flex items-end gap-2">
+        <input type="hidden" name="embedding_provider" id="h-ab-embedding">
+        <input type="hidden" name="llm_provider" id="h-ab-llm">
+        <div class="flex-1">
+          <input type="text" name="query" id="ab-query" required minlength="3"
+                 placeholder="Digite ou clique em uma query frequente abaixo..."
+                 class="w-full px-3 py-2 text-xs border border-juris-200 rounded-lg bg-white
+                        focus:ring-2 focus:ring-juris-400 focus:border-juris-400 outline-none">
+        </div>
+        <div class="flex items-center gap-1.5">
+          <select name="collection_a"
+                  class="text-xs border border-slate-200 rounded-lg px-2 py-2 bg-white text-slate-700">
+            <option value="original">Original</option>
+            <option value="int8">Int8</option>
+            <option value="binary">Binary</option>
+            <option value="random_projection">RP</option>
+            <option value="pca">PCA</option>
+          </select>
+          <span class="text-xs text-slate-400 font-medium">vs</span>
+          <select name="collection_b"
+                  class="text-xs border border-slate-200 rounded-lg px-2 py-2 bg-white text-slate-700">
+            <option value="int8" selected>Int8</option>
+            <option value="binary">Binary</option>
+            <option value="random_projection">RP</option>
+            <option value="pca">PCA</option>
+            <option value="original">Original</option>
+          </select>
+        </div>
+        <button type="submit"
+                class="px-3 py-2 bg-juris-600 text-white text-xs rounded-lg hover:bg-juris-700 transition font-medium">
+          <span id="ab-spinner" class="htmx-indicator">…</span>
+          <span class="ab-label">Comparar</span>
+        </button>
+      </form>
+      <div id="ab-result" class="mt-2"></div>
+    </div>
+
+    <!-- Painel comparação de coleções -->
+    <div id="compare-panel" class="hidden border-b border-slate-200 bg-white px-4 py-3 flex-shrink-0">
+      <p class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">⚖ Testar retrieval nas coleções</p>
+      <div class="flex flex-wrap gap-1.5 mb-2">
+        {% set cmp_q = ["Rescisão e notificação","Valor e pagamento","Confidencialidade","Penalidades","Partes e objeto"] %}
+        {% for q in cmp_q %}
+        <button onclick="useCompareQuery({{ q|tojson }})"
+                class="text-[10px] px-2.5 py-1 rounded-full border border-slate-200 text-slate-600
+                       hover:border-juris-300 hover:text-juris-700 hover:bg-juris-50 transition bg-white">
+          {{ q }}
+        </button>
+        {% endfor %}
+      </div>
+      <form hx-post="/app/chat/compare"
+            hx-target="#compare-result-box"
+            hx-swap="innerHTML"
+            hx-indicator="#cmp-spinner"
+            class="flex gap-2">
+        <input type="text" name="query" id="compare-query" required minlength="3"
+               placeholder="Ou escreva sua consulta..."
+               class="flex-1 px-3 py-2 text-xs border border-slate-200 rounded-lg bg-white
+                      focus:ring-2 focus:ring-juris-400 outline-none">
+        <input type="hidden" name="embedding_provider" id="h-cmp-embedding">
+        <button type="submit"
+                class="px-3 py-2 bg-slate-700 text-white text-xs rounded-lg hover:bg-slate-800 transition font-medium">
+          <span id="cmp-spinner" class="htmx-indicator">…</span>
+          <span class="cmp-label">Testar</span>
+        </button>
+      </form>
+      <div id="compare-result-box" class="mt-2"></div>
+    </div>
+
+    <!-- Queries predefinidas -->
+    <div id="quick-queries" class="px-5 py-3 flex-shrink-0 border-b border-slate-100 bg-white/60">
+      <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Consultas frequentes</p>
+      <div class="flex flex-wrap gap-1.5">
+        {% for q in [
+          "Qual o prazo de rescisão contratual?",
+          "Quais são as obrigações das partes?",
+          "Quais cláusulas de confidencialidade existem?",
+          "Qual o valor e forma de pagamento?",
+          "Quais são as penalidades por inadimplemento?",
+          "Qual o foro de eleição?",
+        ] %}
+        <button onclick="fillQuery({{ q|tojson }})"
+                class="text-[10px] px-3 py-1.5 rounded-full border border-slate-200 text-slate-600
+                       hover:border-juris-300 hover:text-juris-700 hover:bg-juris-50 transition bg-white">
+          {{ q }}
+        </button>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- Histórico de chat -->
+    <div id="chat-history" class="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+      <div id="chat-empty" class="flex flex-col items-center justify-center h-full text-center py-10 text-slate-400">
+        <div class="w-16 h-16 rounded-2xl bg-juris-50 border border-juris-100 flex items-center justify-center mb-3">
+          <span class="text-juris-400 text-2xl font-serif">§</span>
+        </div>
+        <p class="text-sm font-semibold text-slate-600">JurisVector · RAG Jurídico</p>
+        <p class="text-xs mt-1 text-slate-400 max-w-xs">
+          Faça uma pergunta, clique em uma consulta frequente<br>ou use A/B para comparar duas coleções.
+        </p>
+      </div>
+    </div>
+
+    <!-- Input -->
+    <div class="bg-white border-t border-slate-200 px-4 py-3 flex-shrink-0 shadow-sm">
+      <form id="ask-form"
+            hx-post="/app/chat/ask"
+            hx-target="#chat-history"
+            hx-swap="beforeend"
+            hx-indicator="#ask-spinner"
+            hx-on::after-request="afterAsk()"
+            class="flex gap-3 items-end">
+        <input type="hidden" name="embedding_provider" id="h-embedding">
+        <input type="hidden" name="llm_provider" id="h-llm">
+        <input type="hidden" name="vector_collection" id="h-collection">
+        <textarea id="query-input" name="query" required rows="1"
+                  placeholder="Qual o prazo de rescisão? Quais são as obrigações das partes?"
+                  class="flex-1 resize-none border border-slate-300 rounded-xl px-4 py-2.5 text-sm
+                         focus:ring-2 focus:ring-juris-500 focus:border-juris-500 outline-none
+                         max-h-36 overflow-y-auto transition"
+                  onkeydown="handleEnter(event)"
+                  oninput="autoResize(this)"></textarea>
+        <button type="submit"
+                class="flex-shrink-0 bg-juris-600 text-white px-5 py-2.5 rounded-xl
+                       hover:bg-juris-700 transition font-semibold text-sm min-w-[90px] shadow-sm">
+          <span id="ask-spinner" class="htmx-indicator text-xs">Aguarde…</span>
+          <span class="ask-label">Consultar</span>
+        </button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+  const COLLECTION_BADGES = {
+    original: { label: 'baseline',   classes: 'bg-blue-100 text-blue-700' },
+    int8:     { label: '-75% bytes', classes: 'bg-green-100 text-green-700' },
+    binary:   { label: '-97% bytes', classes: 'bg-purple-100 text-purple-700' },
+    random_projection: { label: '-50% dims', classes: 'bg-amber-100 text-amber-700' },
+    pca:      { label: '-50% dims',  classes: 'bg-slate-100 text-slate-600' },
+  };
+
+  const SESSION_KEY = 'jurisvector_chat_history';
+
+  // ── Sincronização de campos ocultos ────────────────────────────────
+  document.getElementById('ask-form').addEventListener('htmx:configRequest', () => {
+    document.getElementById('h-embedding').value  = document.getElementById('sel-embedding').value;
+    document.getElementById('h-llm').value        = document.getElementById('sel-llm').value;
+    document.getElementById('h-collection').value = document.getElementById('sel-collection').value;
+  });
+
+  function updateCollectionBadge() {
+    const sel     = document.getElementById('sel-collection');
+    const badge   = document.getElementById('collection-badge');
+    const warning = document.getElementById('collection-warning');
+    const cfg     = COLLECTION_BADGES[sel.value] || COLLECTION_BADGES.original;
+    badge.textContent = cfg.label;
+    badge.className   = `text-[9px] px-2 py-0.5 rounded-full font-semibold ${cfg.classes}`;
+
+    // Mostra aviso se coleção comprimida selecionada
+    // O usuario deve comprimir pelo menos um documento antes de consultar
+    const opt = sel.options[sel.selectedIndex];
+    const isCompressed = opt.dataset.compressed === "true";
+    warning.classList.toggle('hidden', !isCompressed);
+    if (isCompressed) {
+      const names = { int8: 'Int8', binary: 'Binary',
+                      random_projection: 'Random Projection', pca: 'PCA' };
+      document.getElementById('collection-warning-text').textContent =
+        `Colecao ${names[sel.value] || sel.value}: comprima documentos via menu da sidebar antes de consultar.`;
+    }
+  }
+
+  // ── Após cada resposta ─────────────────────────────────────────────
+  function afterAsk() {
+    const input = document.getElementById('query-input');
+    input.value = '';
+    input.style.height = 'auto';
+    const empty = document.getElementById('chat-empty');
+    if (empty) empty.remove();
+    const qq = document.getElementById('quick-queries');
+    if (qq) qq.classList.add('hidden');
+    const h = document.getElementById('chat-history');
+    setTimeout(() => h.scrollTop = h.scrollHeight, 80);
+    // Persiste histórico no sessionStorage
+    sessionStorage.setItem(SESSION_KEY, h.innerHTML);
+  }
+
+  // ── Histórico: restaura ao voltar para a página ───────────────────
+  (function restoreHistory() {
+    const saved = sessionStorage.getItem(SESSION_KEY);
+    if (!saved) return;
+    const h = document.getElementById('chat-history');
+    h.innerHTML = saved;
+    const empty = document.getElementById('chat-empty');
+    if (empty) empty.remove();
+    const qq = document.getElementById('quick-queries');
+    if (qq) qq.classList.add('hidden');
+    setTimeout(() => h.scrollTop = h.scrollHeight, 50);
+  })();
+
+  // ── Handlers de input ─────────────────────────────────────────────
+  function handleEnter(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      document.getElementById('ask-form').requestSubmit();
+    }
+  }
+  function autoResize(el) {
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 144) + 'px';
+  }
+  function fillQuery(q) {
+    const input = document.getElementById('query-input');
+    input.value = q;
+    input.focus();
+    autoResize(input);
+  }
+  function useCompareQuery(q) {
+    document.getElementById('compare-query').value = q;
+    document.getElementById('h-cmp-embedding').value =
+      document.getElementById('sel-embedding').value;
+    document.querySelector('[hx-post="/app/chat/compare"]').requestSubmit();
+  }
+
+  // ── Painéis toggle ────────────────────────────────────────────────
+  function toggleAB() {
+    const p = document.getElementById('ab-panel');
+    p.classList.toggle('hidden');
+    if (!p.classList.contains('hidden')) {
+      document.getElementById('h-ab-embedding').value =
+        document.getElementById('sel-embedding').value;
+      document.getElementById('h-ab-llm').value =
+        document.getElementById('sel-llm').value;
+    }
+  }
+  function toggleComparePanel() {
+    const p = document.getElementById('compare-panel');
+    p.classList.toggle('hidden');
+    if (!p.classList.contains('hidden')) {
+      document.getElementById('h-cmp-embedding').value =
+        document.getElementById('sel-embedding').value;
+    }
+  }
+  function clearHistory() {
+    sessionStorage.removeItem(SESSION_KEY);
+    document.getElementById('chat-history').innerHTML =
+      `<div id="chat-empty" class="flex flex-col items-center justify-center h-full text-center py-10 text-slate-400">
+        <div class="w-16 h-16 rounded-2xl bg-juris-50 border border-juris-100 flex items-center justify-center mb-3">
+          <span class="text-juris-400 text-2xl font-serif">§</span>
+        </div>
+        <p class="text-sm font-semibold text-slate-600">JurisVector · RAG Jurídico</p>
+        <p class="text-xs mt-1 text-slate-400">Faça uma pergunta ou clique em uma consulta frequente.</p>
+      </div>`;
+    document.getElementById('quick-queries')?.classList.remove('hidden');
+  }
+</script>
+{% endblock %}

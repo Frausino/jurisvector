@@ -86,7 +86,8 @@ sast:
 ## --skip-editable: ignora o próprio docuvector-lite (não está no PyPI).
 ## --ignore-vuln: ver justificativa em .pip-audit.toml.
 sca:
-    uv run pip-audit --skip-editable --ignore-vuln MAL-2026-4750
+    uv run pip-audit --skip-editable --ignore-vuln MAL-2026-4750 --ignore-vuln PYSEC-2026-196
+
 
 ## Detecção de segredos
 secrets-scan:

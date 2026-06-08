@@ -1,0 +1,69 @@
+{% if error %}
+<div class="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-red-700 text-xs">
+  {{ error }}
+</div>
+
+{% elif result %}
+<div class="space-y-2">
+  {% for r in result.results %}
+  <div class="rounded-lg border px-4 py-3 flex items-center gap-3
+              {% if r.provider_name.value == result.fastest_provider.value and r.provider_name.value == result.cheapest_provider.value %}
+              border-juris-200 bg-juris-50
+              {% elif r.provider_name.value == result.fastest_provider.value %}
+              border-blue-200 bg-blue-50
+              {% elif r.provider_name.value == result.cheapest_provider.value %}
+              border-emerald-200 bg-emerald-50
+              {% else %}
+              border-slate-200 bg-white
+              {% endif %}">
+
+    <!-- Provider -->
+    <div class="w-36 flex-shrink-0">
+      <p class="text-xs font-bold text-slate-800">{{ r.provider_name.value }}</p>
+      <p class="text-[10px] text-slate-400 truncate">{{ r.model_name }}</p>
+    </div>
+
+    <!-- Badges -->
+    <div class="flex items-center gap-1 flex-shrink-0">
+      {% if r.provider_name.value == result.fastest_provider.value %}
+      <span class="text-[9px] px-1.5 py-0.5 rounded-full bg-blue-200 text-blue-700 font-semibold">⚡ mais rápido</span>
+      {% endif %}
+      {% if r.provider_name.value == result.cheapest_provider.value %}
+      <span class="text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-200 text-emerald-700 font-semibold">$ mais barato</span>
+      {% endif %}
+    </div>
+
+    <!-- Métricas -->
+    <div class="flex-1 grid grid-cols-4 gap-2 text-right">
+      <div>
+        <p class="text-[9px] text-slate-400">Dimensões</p>
+        <p class="text-xs font-semibold text-slate-700">{{ r.dimensions }}</p>
+      </div>
+      <div>
+        <p class="text-[9px] text-slate-400">Latência</p>
+        <p class="text-xs font-semibold text-slate-700">{{ r.latency_ms }} ms</p>
+      </div>
+      <div>
+        <p class="text-[9px] text-slate-400">Tamanho/vetor</p>
+        <p class="text-xs font-semibold text-slate-700">{{ r.vector_size_bytes }} B</p>
+      </div>
+      <div>
+        <p class="text-[9px] text-slate-400">Custo/1M tokens</p>
+        <p class="text-xs font-semibold
+                   {% if r.cost_usd_per_million_tokens == 0 %}text-emerald-600{% else %}text-slate-700{% endif %}">
+          {% if r.cost_usd_per_million_tokens == 0 %}
+          US$ 0 <span class="text-[9px] font-normal">(local)</span>
+          {% else %}
+          US$ {{ "%.4f"|format(r.cost_usd_per_million_tokens) }}
+          {% endif %}
+        </p>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+
+  <p class="text-[10px] text-slate-400 text-right">
+    Query testada: "{{ result.query }}"
+  </p>
+</div>
+{% endif %}
