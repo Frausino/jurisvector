@@ -1,11 +1,11 @@
 {% extends "base.html" %}
-{% block title %}Cadastro · DocuVector Lite{% endblock %}
+{% block title %}Cadastro · JurisVector{% endblock %}
 
 {% block content %}
 <div class="min-h-[80vh] flex items-center justify-center px-4">
   <div class="w-full max-w-md">
     <div class="text-center mb-8">
-      <div class="text-4xl text-blue-600 font-serif mb-2">§</div>
+      <div class="text-4xl text-juris-600 font-serif mb-2">§</div>
       <h1 class="text-2xl font-semibold text-slate-900">Criar conta</h1>
       <p class="text-sm text-slate-500 mt-1">Acesso ao sistema de consulta jurídica</p>
     </div>
@@ -26,20 +26,20 @@
         <div>
           <label class="block text-sm font-medium text-slate-700 mb-1">Email</label>
           <input type="email" name="email" required autofocus
-                 class="w-full px-3 py-2 border border-slate-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                 class="w-full px-3 py-2 border border-slate-300 rounded focus:ring-2 focus:ring-juris-500 focus:border-juris-500 outline-none"
                  placeholder="advogado@escritorio.com.br">
         </div>
         <div>
           <label class="block text-sm font-medium text-slate-700 mb-1">Senha</label>
           <input type="password" name="password" required
-                 class="w-full px-3 py-2 border border-slate-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                 class="w-full px-3 py-2 border border-slate-300 rounded focus:ring-2 focus:ring-juris-500 focus:border-juris-500 outline-none"
                  placeholder="mínimo 12 caracteres">
           <p class="text-xs text-slate-400 mt-1">
             Mínimo 12 caracteres, conforme política de segurança NIST.
           </p>
         </div>
         <button type="submit"
-                class="w-full bg-blue-600 text-white py-2 rounded font-medium hover:bg-blue-700 transition">
+                class="w-full bg-juris-600 text-white py-2 rounded font-medium hover:bg-juris-700 transition">
           Cadastrar
         </button>
       </form>
@@ -47,7 +47,7 @@
 
     <p class="text-center text-sm text-slate-500 mt-4">
       Já tem conta?
-      <a href="/login" class="text-blue-600 hover:underline">Entrar</a>
+      <a href="/login" class="text-juris-600 hover:underline">Entrar</a>
     </p>
   </div>
 </div>

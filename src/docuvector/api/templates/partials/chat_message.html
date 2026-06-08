@@ -1,70 +1,187 @@
-<!-- Bloco de pergunta + resposta — acumulado no histórico via HTMX beforeend -->
-<div class="space-y-3">
+{% set msg_id = range(100000) | random %}
+<!-- Bloco pergunta + resposta — acumulado via HTMX beforeend -->
+<div class="space-y-2 mb-1" id="msg-{{ msg_id }}">
 
-  <!-- Pergunta do usuário -->
+  <!-- Pergunta -->
   <div class="flex justify-end">
-    <div class="max-w-[75%] bg-blue-600 text-white rounded-2xl rounded-tr-sm px-4 py-2.5 text-sm">
+    <div class="max-w-[72%] bg-juris-600 text-white rounded-2xl rounded-tr-sm px-4 py-2.5 text-sm shadow-sm">
       {{ query }}
     </div>
   </div>
 
-  <!-- Resposta ou erro -->
   {% if error %}
   <div class="flex justify-start">
     <div class="max-w-[80%] bg-red-50 border border-red-200 text-red-700 rounded-2xl rounded-tl-sm px-4 py-3 text-sm">
-      {{ error }}
+      <p class="font-semibold mb-0.5">Erro ao processar consulta</p>
+      <p class="text-xs opacity-80">{{ error }}</p>
     </div>
   </div>
 
   {% elif answer %}
   <div class="flex justify-start">
-    <div class="max-w-[80%] space-y-3">
+    <div class="max-w-[85%] w-full space-y-2">
 
-      <!-- Texto da resposta -->
-      <div class="bg-white border border-slate-200 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm">
+      <!-- Resposta principal -->
+      <div class="bg-white border border-slate-200 rounded-2xl rounded-tl-sm px-4 py-3.5 shadow-sm">
 
-        <!-- Badge do modelo -->
-        <div class="flex items-center gap-2 mb-2">
-          <span class="text-xs font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+        <!-- Badges de contexto -->
+        <div class="flex items-center gap-1.5 flex-wrap mb-2.5">
+          <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-juris-100 text-juris-700">
             {{ answer.model }}
           </span>
-          {% if answer.grounded %}
-          <span class="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700">Fundamentada</span>
+
+          {% if collection and collection != 'original' %}
+          <span class="text-[10px] px-2 py-0.5 rounded-full font-semibold
+                       {% if collection == 'int8' %}bg-green-100 text-green-700
+                       {% elif collection == 'binary' %}bg-purple-100 text-purple-700
+                       {% elif collection == 'random_projection' %}bg-amber-100 text-amber-700
+                       {% elif collection == 'pca' %}bg-slate-100 text-slate-600
+                       {% else %}bg-slate-100 text-slate-500{% endif %}">
+            {{ collection }}
+          </span>
+          {% endif %}
+
+          {% set avg_sim = answer.sources | map(attribute='similarity') | list %}
+          {% set mean_sim = (avg_sim | sum / avg_sim | length) if avg_sim else 0 %}
+
+          {% if not answer.grounded %}
+          <span class="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-medium">
+            ⚠ Sem contexto suficiente
+          </span>
+          {% elif mean_sim >= 0.85 %}
+          <span class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-medium">
+            ✓ Alta confiança
+          </span>
+          {% elif mean_sim >= 0.70 %}
+          <span class="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-medium">
+            ~ Confiança parcial
+          </span>
           {% else %}
-          <span class="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">Sem contexto suficiente</span>
+          <span class="text-[10px] px-2 py-0.5 rounded-full bg-red-100 text-red-700 font-medium">
+            ↓ Contexto fraco
+          </span>
           {% endif %}
         </div>
 
-        <div class="text-sm text-slate-800 whitespace-pre-wrap leading-relaxed">{{ answer.text }}</div>
+        <!-- Texto da resposta -->
+        <p class="text-sm text-slate-800 leading-relaxed whitespace-pre-wrap">{{ answer.text }}</p>
 
-        <!-- Métricas compactas -->
-        <div class="mt-3 pt-2 border-t border-slate-100 flex gap-4 text-xs text-slate-400">
-          <span>{{ answer.tokens_used }} tokens</span>
-          <span>{{ answer.latency_ms }} ms</span>
-          <span>US$ {{ "%.6f"|format(answer.cost_usd) }}</span>
+        <!-- Métricas + fontes resumidas -->
+        <div class="mt-3 pt-2.5 border-t border-slate-100 flex items-center gap-3 flex-wrap">
+          <span class="text-[10px] text-slate-400 flex items-center gap-1">
+            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            {{ answer.latency_ms }} ms
+          </span>
+          <span class="text-[10px] text-slate-400">{{ answer.tokens_used }} tok</span>
+          {% if answer.cost_usd > 0 %}
+          <span class="text-[10px] text-slate-400">US$ {{ "%.5f"|format(answer.cost_usd) }}</span>
+          {% else %}
+          <span class="text-[10px] text-emerald-500 font-medium">US$ 0 (local)</span>
+          {% endif %}
+          {% if answer.sources %}
+          <span class="text-[10px] text-slate-400 ml-auto">
+            {{ answer.sources|length }} fonte{{ 's' if answer.sources|length != 1 else '' }}
+          </span>
+          {% endif %}
         </div>
       </div>
 
       <!-- Fontes citadas -->
       {% if answer.sources %}
       <div class="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3">
-        <p class="text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">Fontes citadas</p>
-        <div class="space-y-2">
+        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2.5">Fontes</p>
+        <div class="space-y-2.5">
           {% for source in answer.sources %}
-          <div class="flex gap-2 text-xs">
-            <span class="flex-shrink-0 w-5 h-5 rounded-full bg-blue-100 text-blue-700
-                         flex items-center justify-center font-medium text-[10px]">
+          <div class="flex gap-2.5">
+            <div class="flex-shrink-0 w-5 h-5 rounded-full bg-juris-600 text-white
+                        flex items-center justify-center text-[9px] font-bold mt-0.5">
               {{ loop.index }}
-            </span>
-            <div class="min-w-0">
-              <p class="font-medium text-slate-700">{{ source.document_filename }}</p>
-              <p class="text-slate-500 mt-0.5 line-clamp-2">
-                {{ source.text[:180] }}{% if source.text|length > 180 %}...{% endif %}
+            </div>
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center justify-between gap-2">
+                <p class="text-xs font-semibold text-slate-700 truncate">{{ source.document_filename }}</p>
+                <div class="flex items-center gap-1 flex-shrink-0">
+                  <div class="w-10 h-1.5 rounded-full bg-slate-200 overflow-hidden">
+                    <div class="h-1.5 rounded-full transition-all
+                                {% if source.similarity >= 0.85 %}bg-emerald-500
+                                {% elif source.similarity >= 0.70 %}bg-amber-400
+                                {% else %}bg-slate-400{% endif %}"
+                         style="width:{{ (source.similarity * 100)|int }}%"></div>
+                  </div>
+                  <span class="text-[9px] text-slate-400 font-mono">{{ "%.2f"|format(source.similarity) }}</span>
+                </div>
+              </div>
+              <p class="text-[10px] text-slate-500 mt-0.5 leading-relaxed line-clamp-2">
+                {{ source.text[:200] }}{% if source.text|length > 200 %}…{% endif %}
               </p>
-              <p class="text-slate-400 mt-0.5">Similaridade: {{ "%.2f"|format(source.similarity) }}</p>
             </div>
           </div>
           {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
+      <!-- ── Ações contextuais inline ────────────────────────────── -->
+      <div class="flex items-center gap-2 flex-wrap pl-0.5">
+        <span class="text-[9px] text-slate-300 font-medium uppercase tracking-wider">Analisar:</span>
+
+        <!-- Comparar coleções: usa a mesma query nesta mensagem -->
+        <button onclick="inlineCompare('msg-{{ msg_id }}', {{ query|tojson }})"
+                class="text-[10px] px-2.5 py-1 rounded-lg border border-slate-200 text-slate-500
+                       hover:border-juris-300 hover:text-juris-700 hover:bg-juris-50 transition bg-white">
+          ⚖ Comparar coleções
+        </button>
+
+        <!-- A/B com a coleção atual como base -->
+        <button onclick="inlineAB('msg-{{ msg_id }}', {{ query|tojson }}, {{ (collection or 'original')|tojson }})"
+                class="text-[10px] px-2.5 py-1 rounded-lg border border-slate-200 text-slate-500
+                       hover:border-purple-300 hover:text-purple-700 hover:bg-purple-50 transition bg-white">
+          ⚡ A/B Compare
+        </button>
+
+        <!-- Sugestões de follow-up -->
+        {% if answer.sources %}
+        <button onclick="toggleFollowUp('fu-{{ msg_id }}')"
+                class="text-[10px] px-2.5 py-1 rounded-lg border border-slate-200 text-slate-500
+                       hover:border-emerald-300 hover:text-emerald-700 hover:bg-emerald-50 transition bg-white">
+          💡 Perguntas relacionadas
+        </button>
+        {% endif %}
+      </div>
+
+      <!-- Área de análise inline (resultado das ações contextuais) -->
+      <div id="inline-analysis-{{ msg_id }}" class="hidden"></div>
+
+      <!-- Follow-up suggestions -->
+      {% if answer.sources %}
+      <div id="fu-{{ msg_id }}" class="hidden">
+        <div class="bg-white border border-emerald-100 rounded-xl px-4 py-3">
+          <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Perguntas relacionadas</p>
+          <div class="flex flex-wrap gap-1.5">
+            {% set doc_names = answer.sources | map(attribute='document_filename') | list | unique %}
+            {% for doc in doc_names %}
+            <button onclick="fillQuery('Quais são as principais obrigações relacionadas ao contexto de {{ doc }}?')"
+                    class="text-[10px] px-2.5 py-1.5 rounded-full border border-emerald-200 text-emerald-700
+                           hover:bg-emerald-50 transition bg-white">
+              Obrigações em {{ doc.replace('.pdf','').replace('_',' ') }}
+            </button>
+            {% endfor %}
+            <!-- Follow-ups genéricos baseados no contexto -->
+            {% for fq in [
+              "Quais são as penalidades previstas?",
+              "Qual o prazo de vigência?",
+              "Como é feita a rescisão?",
+            ] %}
+            <button onclick="fillQuery({{ fq|tojson }})"
+                    class="text-[10px] px-2.5 py-1.5 rounded-full border border-slate-200 text-slate-600
+                           hover:border-emerald-200 hover:text-emerald-700 hover:bg-emerald-50 transition bg-white">
+              {{ fq }}
+            </button>
+            {% endfor %}
+          </div>
         </div>
       </div>
       {% endif %}
@@ -74,3 +191,52 @@
   {% endif %}
 
 </div>
+
+<script>
+  // ── Ações contextuais inline ──────────────────────────────────────
+
+  // Utilitário: POST form-encoded e renderiza HTML no target
+  async function _postForm(url, data, targetId, loadingMsg) {
+    const el = document.getElementById(targetId);
+    if (!el) return;
+    el.classList.remove('hidden');
+    el.innerHTML = `<p class="text-xs text-slate-400 py-2">${loadingMsg}</p>`;
+    const form = new FormData();
+    Object.entries(data).forEach(([k, v]) => form.append(k, v));
+    try {
+      const res = await fetch(url, { method: 'POST', body: form });
+      el.innerHTML = await res.text();
+      // Re-processa scripts HTMX no novo conteúdo
+      htmx.process(el);
+    } catch (err) {
+      el.innerHTML = `<p class="text-xs text-red-500 py-2">Erro: ${err.message}</p>`;
+    }
+  }
+
+  function inlineCompare(msgId, query) {
+    const id = msgId.replace('msg-', '');
+    const embedding = document.getElementById('sel-embedding')?.value || 'sentence_transformers';
+    _postForm('/app/chat/compare',
+      { query, embedding_provider: embedding },
+      'inline-analysis-' + id,
+      'Comparando coleções…'
+    );
+  }
+
+  function inlineAB(msgId, query, collectionA) {
+    const id   = msgId.replace('msg-', '');
+    const embedding = document.getElementById('sel-embedding')?.value || 'sentence_transformers';
+    const llm       = document.getElementById('sel-llm')?.value || 'mock';
+    const collB     = collectionA === 'original' ? 'int8' : 'original';
+    _postForm('/app/chat/compare-answer',
+      { query, embedding_provider: embedding, llm_provider: llm,
+        collection_a: collectionA, collection_b: collB },
+      'inline-analysis-' + id,
+      'Gerando comparação A/B…'
+    );
+  }
+
+  function toggleFollowUp(id) {
+    document.getElementById(id)?.classList.toggle('hidden');
+  }
+</script>

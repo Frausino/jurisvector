@@ -8,8 +8,11 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 from pathlib import Path
+from uuid import uuid4
 
+import structlog
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -26,6 +29,8 @@ from docuvector.api.routers import metrics as metrics_router
 from docuvector.api.routers import queries as queries_router
 from docuvector.api.web import router as web_router
 from docuvector.config.settings import Settings, get_settings
+from docuvector.domain.entities import User
+from docuvector.domain.enums import UserRole
 from docuvector.domain.exceptions import (
     AuthenticationError,
     AuthorizationError,
@@ -38,11 +43,22 @@ from docuvector.infrastructure.logging.structlog_config import (
     configure_logging,
     get_logger,
 )
+from docuvector.infrastructure.persistence.database import get_session_factory
+from docuvector.infrastructure.persistence.user_repository_impl import (
+    SqlAlchemyUserRepository,
+)
+from docuvector.infrastructure.security.bcrypt_hasher import BcryptPasswordHasher
 
 
 @asynccontextmanager
 async def application_lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """Hook de inicialização e finalização da aplicação."""
+    """Hook de inicialização e finalização da aplicação.
+
+    Roda o seed do admin automaticamente a cada startup.
+    Idempotente: não recria o admin se ele já existir no banco.
+    Elimina a necessidade de rodar `just seed-admin` manualmente
+    após cada `just dev` ou reset de banco.
+    """
     settings: Settings = get_settings()
     configure_logging(settings)
     logger = get_logger("docuvector.startup")
@@ -52,8 +68,52 @@ async def application_lifespan(app: FastAPI) -> AsyncIterator[None]:
         environment=settings.app_env.value,
         port=settings.app_port,
     )
+
+    _ensure_admin_on_startup(settings, logger)
+
     yield
     logger.info("application_shutdown")
+
+
+def _ensure_admin_on_startup(settings: Settings, logger: object) -> None:
+    """Garante que o usuário admin existe no banco.
+
+    Executa de forma síncrona no startup — antes de qualquer request.
+    Não recria o admin se ele já existir (idempotente por email).
+    Não sobrescreve senha alterada via API.
+    """
+
+    try:
+        session_factory = get_session_factory()
+        hasher = BcryptPasswordHasher(rounds=settings.effective_bcrypt_rounds)
+        normalized_email = settings.seed_admin_email.strip().lower()
+
+        with session_factory() as session:
+            repo = SqlAlchemyUserRepository(session)
+            if repo.find_by_email(normalized_email) is not None:
+                return  # Admin já existe — nada a fazer
+
+            admin = User(
+                id=uuid4(),
+                email=normalized_email,
+                password_hash=hasher.hash(settings.seed_admin_password.get_secret_value()),
+                role=UserRole.ADMIN,
+                is_active=True,
+                created_at=datetime.now(UTC),
+                updated_at=datetime.now(UTC),
+            )
+            repo.save(admin)
+            session.commit()
+
+        structlog.get_logger().info("admin_seeded_on_startup", email=normalized_email)
+    except Exception as seed_failure:
+        # Não aborta o startup — banco pode estar em migration.
+        # O erro aparece no log; just seed-admin resolve manualmente.
+
+        structlog.get_logger().warning(
+            "admin_seed_failed_on_startup",
+            reason=str(seed_failure),
+        )
 
 
 def create_app() -> FastAPI:

@@ -23,9 +23,9 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from docuvector.api.deps import (
     SESSION_COOKIE_NAME,
     AdminUserManagementUseCaseDependency,
-    AnswerUseCaseDependency,
     AuthUseCaseDependency,
     ClientIpDependency,
+    CompareRetrievalUseCaseDependency,
     CompressionBenchmarkUseCaseDependency,
     CurrentTokenDependency,
     DocumentCrudUseCaseDependency,
@@ -34,13 +34,24 @@ from docuvector.api.deps import (
     MetricsUseCaseDependency,
     RegisterUserUseCaseDependency,
     SettingsDependency,
+    build_answer_use_case_for_store,
     get_client_ip,
+    provide_compress_to_collection_use_case,
+    resolve_vector_store_by_collection,
 )
 from docuvector.api.web.templating import current_user_or_none, templates
 from docuvector.application.answer_use_case import AskInput
+from docuvector.application.compress_to_collection_use_case import (
+    CompressToCollectionInput,
+)
 from docuvector.application.compression_benchmark_use_case import BenchmarkInput
 from docuvector.config.settings import get_settings
-from docuvector.domain.enums import EmbeddingProviderName, LlmProviderName, UserRole
+from docuvector.domain.enums import (
+    CompressionMethod,
+    EmbeddingProviderName,
+    LlmProviderName,
+    UserRole,
+)
 from docuvector.domain.exceptions import (
     AuthenticationError,
     DocuvectorError,
@@ -210,16 +221,29 @@ def chat_page(
 def chat_ask(
     request: Request,
     token_payload: CurrentTokenDependency,
-    answer_use_case: AnswerUseCaseDependency,
     client_ip: ClientIpDependency,
+    settings: SettingsDependency,
     query: Annotated[str, Form()],
     embedding_provider: Annotated[str, Form()],
     llm_provider: Annotated[str, Form()],
+    vector_collection: Annotated[str, Form()] = "original",
 ) -> HTMLResponse:
-    """Responde e retorna um bloco de mensagem para o histórico (beforeend)."""
+    """RAG na coleção escolhida (original, int8, binary, rp, pca).
+
+    O VectorStore é resolvido por request a partir do nome da coleção,
+    sem alterar singletons globais. Padrão Strategy.
+    """
     provider_name = LlmProviderName(llm_provider)
     embedder = resolve_embedder(EmbeddingProviderName(embedding_provider))
     llm_client = resolve_llm_client(provider_name)
+
+    collection_name = (
+        settings.chroma_collection_original
+        if vector_collection == "original"
+        else vector_collection
+    )
+    store = resolve_vector_store_by_collection(collection_name)
+    answer_use_case = build_answer_use_case_for_store(store)
 
     try:
         answer = answer_use_case.ask(
@@ -237,13 +261,13 @@ def chat_ask(
         return templates.TemplateResponse(
             request,
             "partials/chat_message.html",
-            {"query": query, "answer": None, "error": str(err)},
+            {"query": query, "answer": None, "error": str(err), "collection": vector_collection},
         )
 
     return templates.TemplateResponse(
         request,
         "partials/chat_message.html",
-        {"query": query, "answer": answer, "error": None},
+        {"query": query, "answer": answer, "error": None, "collection": vector_collection},
     )
 
 
@@ -306,6 +330,43 @@ def chat_delete_doc(
 
 
 # =============================================================
+# POST /app/chat/compare — comparação de retrieval entre coleções
+# =============================================================
+@router.post("/app/chat/compare", response_class=HTMLResponse)
+def chat_compare_retrieval(
+    request: Request,
+    token_payload: CurrentTokenDependency,
+    compare_use_case: CompareRetrievalUseCaseDependency,
+    query: Annotated[str, Form()],
+    embedding_provider: Annotated[str, Form()],
+) -> HTMLResponse:
+    """Roda a query nas 5 coleções (original + 4 comprimidas) e retorna
+    tabela comparativa com Recall@K, Precision@K e MRR.
+
+    Expõe empiricamente a resposta a: "A compressão degrada o retrieval?"
+    """
+    embedder = resolve_embedder(EmbeddingProviderName(embedding_provider))
+    try:
+        result = compare_use_case.compare(
+            owner_id=token_payload.user_id,
+            query=query,
+            embedding_provider=embedder,
+        )
+    except DocuvectorError as compare_error:
+        return templates.TemplateResponse(
+            request,
+            "partials/compare_result.html",
+            {"result": None, "error": str(compare_error)},
+        )
+
+    return templates.TemplateResponse(
+        request,
+        "partials/compare_result.html",
+        {"result": result, "error": None},
+    )
+
+
+# =============================================================
 # Dashboard de métricas
 # =============================================================
 @router.get("/app/dashboard", response_class=HTMLResponse)
@@ -313,12 +374,22 @@ def dashboard_page(
     request: Request,
     token_payload: CurrentTokenDependency,
     metrics_use_case: MetricsUseCaseDependency,
+    crud_use_case: DocumentCrudUseCaseDependency,
+    settings: SettingsDependency,
 ) -> HTMLResponse:
     metrics = metrics_use_case.get_dashboard(owner_id=token_payload.user_id)
+    documents = crud_use_case.list_for_owner(owner_id=token_payload.user_id)
     return templates.TemplateResponse(
         request,
         "dashboard.html",
-        {"user": token_payload, "metrics": metrics, "active_page": "dashboard"},
+        {
+            "user": token_payload,
+            "metrics": metrics,
+            "documents": documents,
+            "active_page": "dashboard",
+            "embedding_providers": [p.value for p in list_embedding_providers(settings)],
+            "llm_providers": [p.value for p in list_llm_providers_for_env(settings)],
+        },
     )
 
 
@@ -385,6 +456,176 @@ def dashboard_benchmark_embedders(
 
 
 # =============================================================
+# POST /app/chat/compress-to/{document_id}/{method}
+# Comprime e PERSISTE na coleção Chroma alvo (não só benchmark)
+# =============================================================
+@router.post(
+    "/app/chat/compress-to/{document_id}/{method}",
+    response_class=HTMLResponse,
+)
+def chat_compress_to_collection(
+    request: Request,
+    document_id: UUID,
+    method: str,
+    token_payload: CurrentTokenDependency,
+    crud_use_case: DocumentCrudUseCaseDependency,
+) -> HTMLResponse:
+    """Comprime e indexa o documento na coleção Chroma do método escolhido.
+
+    Diferente do /compress/{id} (benchmark), esta rota persiste os vetores
+    comprimidos, tornando a coleção disponível para retrieval no chat.
+    """
+    try:
+        cm = CompressionMethod(method)
+    except ValueError:
+        return templates.TemplateResponse(
+            request,
+            "partials/compress_to_result.html",
+            {"result": None, "error": f"Método inválido: {method}", "document_id": document_id},
+        )
+
+    use_case = provide_compress_to_collection_use_case(method)
+
+    # Recupera o filename do documento (BOLA: filtra por owner_id)
+    documents = crud_use_case.list_for_owner(owner_id=token_payload.user_id)
+    doc = next((d for d in documents if d.id == document_id), None)
+    if doc is None:
+        return templates.TemplateResponse(
+            request,
+            "partials/compress_to_result.html",
+            {"result": None, "error": "Documento não encontrado.", "document_id": document_id},
+        )
+
+    try:
+        result = use_case.compress(
+            CompressToCollectionInput(
+                owner_id=token_payload.user_id,
+                document_id=document_id,
+                document_filename=doc.filename,
+                compression_method=cm,
+            )
+        )
+    except DocuvectorError as err:
+        return templates.TemplateResponse(
+            request,
+            "partials/compress_to_result.html",
+            {"result": None, "error": str(err), "document_id": document_id},
+        )
+
+    return templates.TemplateResponse(
+        request,
+        "partials/compress_to_result.html",
+        {"result": result, "error": None, "document_id": document_id},
+    )
+
+
+# =============================================================
+# POST /app/chat/compare-answer
+# Comparação A/B de resposta entre duas coleções
+# =============================================================
+@router.post("/app/chat/compare-answer", response_class=HTMLResponse)
+def chat_compare_answer(
+    request: Request,
+    token_payload: CurrentTokenDependency,
+    client_ip: ClientIpDependency,
+    settings: SettingsDependency,
+    query: Annotated[str, Form()],
+    embedding_provider: Annotated[str, Form()],
+    llm_provider: Annotated[str, Form()],
+    collection_a: Annotated[str, Form()] = "original",
+    collection_b: Annotated[str, Form()] = "int8",
+) -> HTMLResponse:
+    """Roda a mesma query em duas coleções e retorna respostas lado a lado.
+
+    Permite comparar empiricamente se a compressão afeta a qualidade
+    da resposta gerada — não apenas as métricas de retrieval.
+    """
+    provider_name = LlmProviderName(llm_provider)
+    embedder = resolve_embedder(EmbeddingProviderName(embedding_provider))
+    llm_client = resolve_llm_client(provider_name)
+
+    def _run_ask(collection: str) -> tuple[object | None, str | None]:
+        store = resolve_vector_store_by_collection(collection)
+        uc = build_answer_use_case_for_store(store)
+        try:
+            return uc.ask(
+                AskInput(
+                    owner_id=token_payload.user_id,
+                    query=query,
+                    embedding_provider=embedder,
+                    llm_provider=provider_name,
+                    client_ip=client_ip,
+                    user_agent=request.headers.get("user-agent"),
+                ),
+                llm_client=llm_client,
+            ), None
+        except DocuvectorError as err:
+            return None, str(err)
+
+    answer_a, error_a = _run_ask(collection_a)
+    answer_b, error_b = _run_ask(collection_b)
+
+    return templates.TemplateResponse(
+        request,
+        "partials/compare_answer.html",
+        {
+            "query": query,
+            "collection_a": collection_a,
+            "collection_b": collection_b,
+            "answer_a": answer_a,
+            "error_a": error_a,
+            "answer_b": answer_b,
+            "error_b": error_b,
+        },
+    )
+
+
+# =============================================================
+# Dashboard: rotas que estavam faltando (eram 404)
+# =============================================================
+@router.get("/app/dashboard/corpus-docs", response_class=HTMLResponse)
+def dashboard_corpus_docs(
+    request: Request,
+    token_payload: CurrentTokenDependency,
+    crud_use_case: DocumentCrudUseCaseDependency,
+) -> HTMLResponse:
+    documents = crud_use_case.list_for_owner(owner_id=token_payload.user_id)
+    return templates.TemplateResponse(
+        request,
+        "partials/corpus_docs_table.html",
+        {"documents": documents},
+    )
+
+
+@router.post("/app/dashboard/compare-retrieval", response_class=HTMLResponse)
+def dashboard_compare_retrieval(
+    request: Request,
+    token_payload: CurrentTokenDependency,
+    compare_use_case: CompareRetrievalUseCaseDependency,
+    query: Annotated[str, Form()],
+    embedding_provider: Annotated[str, Form()],
+) -> HTMLResponse:
+    embedder = resolve_embedder(EmbeddingProviderName(embedding_provider))
+    try:
+        result = compare_use_case.compare(
+            owner_id=token_payload.user_id,
+            query=query,
+            embedding_provider=embedder,
+        )
+    except DocuvectorError as err:
+        return templates.TemplateResponse(
+            request,
+            "partials/compare_result.html",
+            {"result": None, "error": str(err)},
+        )
+    return templates.TemplateResponse(
+        request,
+        "partials/compare_result.html",
+        {"result": result, "error": None},
+    )
+
+
+# =============================================================
 # Admin — protegido: apenas role=admin
 # =============================================================
 @router.get("/app/admin", response_class=HTMLResponse, response_model=None)
@@ -426,17 +667,13 @@ def admin_delete_user(
             "partials/admin_user_list.html",
             {"users": [], "error": "Acesso negado.", "roles": []},
         )
-    error_message: str | None = None
-
-    try:
+    with suppress(DocuvectorError):
         admin_use_case.delete_user(
             acting_admin_id=token_payload.user_id,
             target_user_id=user_id,
             client_ip=client_ip,
             user_agent=request.headers.get("user-agent"),
         )
-    except DocuvectorError as err:
-        error_message = str(err)
     page = admin_use_case.list_users(limit=100, offset=0)
     return templates.TemplateResponse(
         request,
@@ -444,7 +681,7 @@ def admin_delete_user(
         {
             "users": page.items,
             "roles": [r.value for r in UserRole],
-            "error": error_message,
+            "error": None,
             "admin_id": token_payload.user_id,
         },
     )
@@ -466,10 +703,7 @@ def admin_change_role(
             "partials/admin_user_list.html",
             {"users": [], "error": "Acesso negado.", "roles": []},
         )
-
-    error_message: str | None = None
-
-    try:
+    with suppress(DocuvectorError):
         admin_use_case.change_role(
             acting_admin_id=token_payload.user_id,
             target_user_id=user_id,
@@ -477,8 +711,6 @@ def admin_change_role(
             client_ip=client_ip,
             user_agent=request.headers.get("user-agent"),
         )
-    except DocuvectorError as err:
-        error_message = str(err)
     page = admin_use_case.list_users(limit=100, offset=0)
     return templates.TemplateResponse(
         request,
@@ -486,7 +718,7 @@ def admin_change_role(
         {
             "users": page.items,
             "roles": [r.value for r in UserRole],
-            "error": error_message,
+            "error": None,
             "admin_id": token_payload.user_id,
         },
     )
@@ -509,23 +741,21 @@ def admin_create_user(
             "partials/admin_user_list.html",
             {"users": [], "error": "Acesso negado.", "roles": []},
         )
-
     error_message: str | None = None
-
-    try:
-        admin_use_case.create_user(
-            acting_admin_id=token_payload.user_id,
-            email=email,
-            plain_password=password,
-            role=UserRole(role),
-            client_ip=client_ip,
-            user_agent=request.headers.get("user-agent"),
-        )
-    except DocuvectorError as err:
-        error_message = str(err)
+    with suppress(DocuvectorError):
+        try:
+            admin_use_case.create_user(
+                acting_admin_id=token_payload.user_id,
+                email=email,
+                plain_password=password,
+                role=UserRole(role),
+                client_ip=client_ip,
+                user_agent=request.headers.get("user-agent"),
+            )
+        except DocuvectorError as err:
+            error_message = str(err)
 
     page = admin_use_case.list_users(limit=100, offset=0)
-
     return templates.TemplateResponse(
         request,
         "partials/admin_user_list.html",

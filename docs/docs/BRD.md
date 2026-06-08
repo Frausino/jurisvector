@@ -1,9 +1,9 @@
 # BRD — Business Requirements Document
 
-**Projeto:** DocuVector Lite
+**Projeto:** JurisVector
 **Versão:** 1.0
 **Data:** 25/05/2026
-**Autor:** Davi Rosa F.
+**Autor:** Davi Rosa F. e Breno Manoel
 **Disciplina:** Desenvolvimento de Sistemas — CEUB
 
 ---
@@ -12,7 +12,7 @@
 
 | Item | Valor |
 |---|---|
-| Nome do produto | DocuVector Lite |
+| Nome do produto | JurisVector |
 | Tipo de projeto | Trabalho acadêmico avaliativo (graduação) |
 | Cliente | Disciplina de Desenvolvimento de Sistemas |
 | Duração | 14 dias corridos |
@@ -23,7 +23,7 @@
 
 Sistemas de Retrieval-Augmented Generation (RAG) tornaram-se padrão para fazer modelos de linguagem responderem sobre documentos privados. A maior parte das demonstrações didáticas, no entanto, esconde dois custos críticos do RAG real: o custo de memória dos embeddings e o custo financeiro do provedor de embedding.
 
-DocuVector Lite é um portal web que faz o pipeline RAG funcionar de ponta a ponta (upload, indexação, consulta, resposta com fontes) e expõe esses dois custos de forma observável. O sistema permite ao usuário escolher entre embedder local e remoto, e comparar quatro algoritmos de compressão vetorial lado a lado, com métricas calculadas sobre o seu próprio documento.
+JurisVector é um portal web que faz o pipeline RAG funcionar de ponta a ponta (upload, indexação, consulta, resposta com fontes) e expõe esses dois custos de forma observável. O sistema permite ao usuário escolher entre embedder local e remoto, e comparar quatro algoritmos de compressão vetorial lado a lado, com métricas calculadas sobre o seu próprio documento.
 
 O diferencial não está em inventar um algoritmo novo, mas em transformar a engenharia interna de um sistema RAG em algo observável, defensável e didático.
 

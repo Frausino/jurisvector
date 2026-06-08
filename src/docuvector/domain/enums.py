@@ -27,6 +27,8 @@ class AuditAction(str, Enum):
     DOCUMENT_DELETED = "document_deleted"
     DOCUMENT_UPDATED = "document_updated"
     QUERY_EXECUTED = "query_executed"
+    RETRIEVAL_COMPARED = "retrieval_compared"
+    MULTI_COLLECTION_INGESTED = "multi_collection_ingested"
 
 
 class AuditStatus(str, Enum):

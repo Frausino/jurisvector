@@ -1,0 +1,55 @@
+{% if error %}
+<div class="px-3 py-2 rounded-lg bg-red-50 border border-red-200 text-red-700 text-[10px]">
+  {{ error }}
+</div>
+
+{% elif result %}
+<div class="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2.5">
+  <div class="flex items-center gap-2 mb-1">
+    <svg class="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+    </svg>
+    <span class="text-[10px] font-semibold text-emerald-800">
+      Indexado como <span class="uppercase">{{ result.compression_method.value }}</span>
+    </span>
+  </div>
+  <div class="text-[10px] text-emerald-700 space-y-0.5 pl-5">
+    <p>{{ result.chunks_indexed }} chunk{{ 's' if result.chunks_indexed != 1 else '' }} na colecao
+       <code class="bg-emerald-100 px-1 rounded">{{ result.collection_name }}</code>
+    </p>
+    {% if result.pca_explained_variance is not none %}
+    <p>PCA: <strong>{{ (result.pca_explained_variance * 100)|round(1) }}%</strong> da variancia explicada</p>
+    {% if result.pca_explained_variance < 0.7 %}
+    <p class="text-amber-700 font-medium">Variancia baixa — adicione mais documentos para melhorar o PCA.</p>
+    {% endif %}
+    {% endif %}
+  </div>
+  <p class="text-[9px] text-emerald-600 mt-1.5 pl-5">
+    Selecione <strong>{{ result.compression_method.value }}</strong> no seletor de colecao no chat para usar estes vetores.
+  </p>
+</div>
+
+<script>
+  (function() {
+    var badgesEl = document.getElementById('badges-{{ document_id }}');
+    if (!badgesEl) return;
+    var method = '{{ result.compression_method.value }}';
+    var cfg = {
+      int8:              { label: 'int8', cls: 'bg-green-100 text-green-700' },
+      binary:            { label: 'bin',  cls: 'bg-purple-100 text-purple-700' },
+      random_projection: { label: 'rp',   cls: 'bg-amber-100 text-amber-700' },
+      pca:               { label: 'pca',  cls: 'bg-slate-100 text-slate-600' }
+    }[method] || { label: method, cls: 'bg-slate-100 text-slate-500' };
+    var hint = badgesEl.querySelector('.italic');
+    if (hint) hint.remove();
+    if (!badgesEl.querySelector('[data-method="' + method + '"]')) {
+      var span = document.createElement('span');
+      span.setAttribute('data-method', method);
+      span.className = 'text-[9px] px-1.5 py-0.5 rounded-full font-semibold ' + cfg.cls;
+      span.title = 'Indexado como ' + method + ' - disponivel no seletor';
+      span.textContent = cfg.label + ' ok';
+      badgesEl.appendChild(span);
+    }
+  })();
+</script>
+{% endif %}

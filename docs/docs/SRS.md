@@ -1,9 +1,9 @@
 # SRS — Software Requirements Specification
 
-**Projeto:** DocuVector Lite
+**Projeto:** JurisVector
 **Versão:** 1.0
 **Data:** 25/05/2026
-**Autor:** Davi Rosa F.
+**Autor:** Davi Rosa F. e Breno Manoel
 **Documento de origem:** `docs/BRD.md` v1.0
 **Padrão de referência:** IEEE 830 (adaptado, em PT-BR)
 
@@ -13,7 +13,7 @@
 
 ### 1.1 Propósito
 
-Este documento especifica formalmente os requisitos funcionais e não funcionais do DocuVector Lite v1.0. É o contrato técnico que orienta a implementação, os testes e a avaliação do trabalho final da disciplina de Desenvolvimento de Sistemas.
+Este documento especifica formalmente os requisitos funcionais e não funcionais do JurisVector v1.0. É o contrato técnico que orienta a implementação, os testes e a avaliação do trabalho final da disciplina de Desenvolvimento de Sistemas.
 
 ### 1.2 Escopo do produto
 
@@ -47,7 +47,7 @@ O escopo desta especificação é coextensivo ao documento `docs/ESCOPO_CONGELAD
 
 ### 2.1 Perspectiva do produto
 
-DocuVector Lite é uma aplicação web monolítica modular, com backend FastAPI e front-end server-side (Jinja2 + HTMX), persistência relacional em PostgreSQL via SQLAlchemy, e store vetorial em ChromaDB persistente local. Não depende de serviços de nuvem para funcionar; depende opcionalmente da API OpenAI quando o usuário escolhe o provedor remoto.
+JurisVector é uma aplicação web monolítica modular, com backend FastAPI e front-end server-side (Jinja2 + HTMX), persistência relacional em PostgreSQL via SQLAlchemy, e store vetorial em ChromaDB persistente local. Não depende de serviços de nuvem para funcionar; depende opcionalmente da API OpenAI quando o usuário escolhe o provedor remoto.
 
 ### 2.2 Funções principais
 

@@ -1,5 +1,5 @@
 {% if error %}
-<div class="mx-3 mt-2 px-3 py-2 rounded bg-red-50 border border-red-200 text-red-700 text-xs">
+<div class="mx-3 mt-2 px-3 py-2 rounded-lg bg-red-50 border border-red-200 text-red-700 text-xs">
   {{ error }}
 </div>
 {% endif %}
@@ -7,54 +7,119 @@
 {% if documents %}
 <div class="divide-y divide-slate-100">
   {% for doc in documents %}
-  <div class="px-3 py-2.5 hover:bg-slate-50 transition">
+  <div class="px-3 py-3 hover:bg-slate-50/80 transition-colors">
 
-    <!-- Linha principal do documento -->
+    <!-- Linha principal -->
     <div class="flex items-start gap-2 group">
       <div class="flex-1 min-w-0">
-        <p class="text-xs font-medium text-slate-800 truncate" title="{{ doc.filename }}">
+        <p class="text-xs font-semibold text-slate-800 truncate leading-tight" title="{{ doc.filename }}">
           {{ doc.filename }}
         </p>
-        <div class="flex items-center gap-1.5 mt-0.5 flex-wrap">
+        <div class="flex items-center gap-1.5 mt-1 flex-wrap">
           {% if doc.status.value == 'embedded' %}
-          <span class="text-[10px] px-1.5 py-0.5 rounded bg-green-100 text-green-700">indexado</span>
+          <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-medium">indexado</span>
           {% elif doc.status.value == 'failed' %}
-          <span class="text-[10px] px-1.5 py-0.5 rounded bg-red-100 text-red-700">falhou</span>
+          <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-red-100 text-red-700">falhou</span>
           {% else %}
-          <span class="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">{{ doc.status.value }}</span>
+          <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">{{ doc.status.value }}</span>
           {% endif %}
           <span class="text-[10px] text-slate-400">{{ (doc.size_bytes / 1024) | round(1) }} KB</span>
-          {% if doc.compression_method %}
-          <span class="text-[10px] px-1.5 py-0.5 rounded bg-purple-100 text-purple-700">
-            {{ doc.compression_method.value }} {{ doc.semantic_retention | round(2) if doc.semantic_retention else '' }}
-          </span>
+        </div>
+
+        <!-- Badges: coleções onde este documento esta indexado -->
+        <div class="flex items-center gap-1 mt-1.5 flex-wrap" id="badges-{{ doc.id }}">
+          <span class="text-[9px] px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 font-medium"
+                title="Colecao original float32 sempre disponivel">orig</span>
+          {% if doc.compression_method is not none %}
+            {% set cm = doc.compression_method.value %}
+            {% if cm == "int8" %}
+            <span data-method="int8" class="text-[9px] px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 font-semibold"
+                  title="Indexado como Int8 - disponivel no seletor">int8 ok</span>
+            {% elif cm == "binary" %}
+            <span data-method="binary" class="text-[9px] px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-700 font-semibold"
+                  title="Indexado como Binary - disponivel no seletor">bin ok</span>
+            {% elif cm == "random_projection" %}
+            <span data-method="random_projection" class="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 font-semibold"
+                  title="Indexado como Random Projection - disponivel no seletor">rp ok</span>
+            {% elif cm == "pca" %}
+            <span data-method="pca" class="text-[9px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600 font-semibold"
+                  title="Indexado como PCA - disponivel no seletor">pca ok</span>
+            {% endif %}
+            {% if doc.semantic_retention %}
+            <span class="text-[9px] text-slate-400">{{ (doc.semantic_retention * 100)|round(1) }}% ret.</span>
+            {% endif %}
+          {% else %}
+            <span class="text-[9px] text-slate-300 italic"
+                  title="Use o menu para comprimir e indexar nesta colecao">comprimir &rarr;</span>
           {% endif %}
         </div>
       </div>
 
-      <!-- Ações: comprimir + deletar -->
-      <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition flex-shrink-0">
+      <!-- Menu de ações -->
+      <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
         {% if doc.status.value == 'embedded' %}
+
+        <!-- Botão benchmark (análise sem persistir) -->
         <button hx-post="/app/chat/compress/{{ doc.id }}"
-                hx-target="#compress-result-{{ doc.id }}"
+                hx-target="#inline-{{ doc.id }}"
                 hx-swap="innerHTML"
-                hx-indicator="#compress-spinner-{{ doc.id }}"
-                title="Analisar compressão"
-                class="text-purple-400 hover:text-purple-700 transition">
-          <span id="compress-spinner-{{ doc.id }}" class="htmx-indicator text-[10px]">...</span>
-          <svg class="w-3.5 h-3.5 compress-icon-{{ doc.id }}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                hx-indicator="#spin-{{ doc.id }}"
+                title="Analisar compressão (sem persistir)"
+                class="p-1 text-slate-400 hover:text-purple-600 hover:bg-purple-50 rounded transition">
+          <span id="spin-{{ doc.id }}" class="htmx-indicator text-[8px]">…</span>
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                  d="M4 7v10c0 2 1 3 3 3h10c2 0 3-1 3-3V7c0-2-1-3-3-3H7C5 4 4 5 4 7z"/>
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6M12 9v6"/>
+                  d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
           </svg>
         </button>
+
+        <!-- Menu dropdown: comprimir e indexar -->
+        <div class="relative" id="menu-wrap-{{ doc.id }}">
+          <button onclick="toggleCompressMenu('{{ doc.id }}')"
+                  title="Comprimir e indexar na coleção"
+                  class="p-1 text-slate-400 hover:text-juris-600 hover:bg-juris-50 rounded transition">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
+            </svg>
+          </button>
+          <!-- Dropdown menu -->
+          <div id="compress-menu-{{ doc.id }}"
+               class="hidden absolute right-0 top-6 z-20 bg-white border border-slate-200
+                      rounded-xl shadow-lg py-1.5 w-52">
+            <p class="px-3 py-1 text-[9px] font-semibold text-slate-400 uppercase tracking-wider">
+              Comprimir e indexar como:
+            </p>
+            {% for method, label, color in [
+              ('int8',              'Int8 · -75% bytes',      'text-green-700'),
+              ('binary',            'Binary · -97% bytes',    'text-purple-700'),
+              ('random_projection', 'Random Projection · -50% dims', 'text-amber-700'),
+              ('pca',               'PCA · -50% dims',        'text-slate-600'),
+            ] %}
+            <button hx-post="/app/chat/compress-to/{{ doc.id }}/{{ method }}"
+                    hx-target="#inline-{{ doc.id }}"
+                    hx-swap="innerHTML"
+                    hx-on::after-request="closeCompressMenu('{{ doc.id }}')"
+                    class="w-full text-left px-3 py-2 text-xs {{ color }} hover:bg-slate-50 transition flex items-center gap-2">
+              <span class="w-2 h-2 rounded-full flex-shrink-0
+                           {% if method == 'int8' %}bg-green-400
+                           {% elif method == 'binary' %}bg-purple-400
+                           {% elif method == 'random_projection' %}bg-amber-400
+                           {% else %}bg-slate-400{% endif %}"></span>
+              {{ label }}
+            </button>
+            {% endfor %}
+          </div>
+        </div>
         {% endif %}
+
+        <!-- Deletar -->
         <button hx-post="/app/chat/delete/{{ doc.id }}"
                 hx-target="#sidebar-docs"
                 hx-swap="innerHTML"
-                hx-confirm="Remover '{{ doc.filename }}'?"
+                hx-confirm="Remover '{{ doc.filename }}'? Isso remove o documento de todas as coleções."
                 title="Remover documento"
-                class="text-slate-300 hover:text-red-500 transition">
+                class="p-1 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded transition">
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
           </svg>
@@ -62,15 +127,38 @@
       </div>
     </div>
 
-    <!-- Resultado de compressão (expansível inline) -->
-    <div id="compress-result-{{ doc.id }}" class="mt-1"></div>
+    <!-- Área inline: resultado de análise ou compressão -->
+    <div id="inline-{{ doc.id }}" class="mt-1.5"></div>
 
   </div>
   {% endfor %}
 </div>
 {% else %}
-<div class="px-3 py-8 text-center text-slate-400">
-  <p class="text-xs">Nenhum documento indexado.</p>
+<div class="px-4 py-8 text-center text-slate-400">
+  <div class="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-2">
+    <span class="text-slate-300 font-serif text-lg">§</span>
+  </div>
+  <p class="text-xs font-medium">Nenhum documento indexado</p>
   <p class="text-[10px] mt-1 text-slate-300">Envie um PDF ou TXT acima.</p>
 </div>
 {% endif %}
+
+<script>
+  function toggleCompressMenu(docId) {
+    const menu = document.getElementById('compress-menu-' + docId);
+    menu.classList.toggle('hidden');
+    // Fecha outros menus abertos
+    document.querySelectorAll('[id^="compress-menu-"]').forEach(m => {
+      if (m.id !== 'compress-menu-' + docId) m.classList.add('hidden');
+    });
+  }
+  function closeCompressMenu(docId) {
+    document.getElementById('compress-menu-' + docId)?.classList.add('hidden');
+  }
+  // Fecha ao clicar fora
+  document.addEventListener('click', function(e) {
+    if (!e.target.closest('[id^="menu-wrap-"]')) {
+      document.querySelectorAll('[id^="compress-menu-"]').forEach(m => m.classList.add('hidden'));
+    }
+  });
+</script>

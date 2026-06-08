@@ -15,6 +15,10 @@ from docuvector.application.admin_user_management_use_case import (
 )
 from docuvector.application.answer_use_case import AnswerUseCase
 from docuvector.application.auth_use_case import AuthUseCase
+from docuvector.application.compare_retrieval_use_case import CompareRetrievalUseCase
+from docuvector.application.compress_to_collection_use_case import (
+    CompressToCollectionUseCase,
+)
 from docuvector.application.compression_benchmark_use_case import (
     CompressionBenchmarkUseCase,
 )
@@ -24,17 +28,24 @@ from docuvector.application.embedding_benchmark_use_case import (
 )
 from docuvector.application.ingestion_use_case import IngestionUseCase
 from docuvector.application.metrics_use_case import MetricsUseCase
+from docuvector.application.multi_collection_ingestion_use_case import (
+    MultiCollectionIngestionUseCase,
+)
 from docuvector.application.register_user_use_case import RegisterUserUseCase
 from docuvector.application.retrieval_use_case import RetrievalUseCase
 from docuvector.config.settings import Settings, get_settings
-from docuvector.domain.enums import UserRole
+from docuvector.domain.enums import CompressionMethod, UserRole
 from docuvector.domain.exceptions import AuthenticationError
+from docuvector.domain.interfaces import VectorStore
 from docuvector.domain.interfaces.password_policy_validator import (
     PasswordPolicyValidator,
 )
 from docuvector.domain.interfaces.token_service import TokenPayload
-from docuvector.infrastructure.chunking.recursive_splitter import (
-    RecursiveSplitter,
+from docuvector.infrastructure.chunking.recursive_splitter import RecursiveSplitter
+from docuvector.infrastructure.compression.binary_compressor import BinaryCompressor
+from docuvector.infrastructure.compression.int8_compressor import Int8Compressor
+from docuvector.infrastructure.compression.random_projection_compressor import (
+    RandomProjectionCompressor,
 )
 from docuvector.infrastructure.persistence.audit_repository_impl import (
     SqlAlchemyAuditRepository,
@@ -59,6 +70,16 @@ from docuvector.infrastructure.security.nist_password_policy_validator import (
 from docuvector.infrastructure.vector_stores.chroma_vector_store import (
     ChromaVectorStore,
 )
+from docuvector.infrastructure.vector_stores.compressed_vector_store import (
+    CompressedVectorStore,
+)
+from docuvector.infrastructure.vector_stores.corpus_pca_store import CorpusPcaStore
+
+# Alias de tipo para o par (método de compressão, vector store).
+# Usa VectorStore (Protocol) em vez de tipos concretos para desacoplamento.
+# CompressedVectorStore e CorpusPcaStore implementam VectorStore
+# implicitamente (structural subtyping via Protocol).
+StoreEntry = tuple[CompressionMethod, VectorStore]
 
 _bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -117,7 +138,7 @@ def get_vector_store() -> ChromaVectorStore:
     settings = get_settings()
     return ChromaVectorStore(
         persist_directory=str(settings.chroma_persist_dir),
-        collection_name="docuvector",
+        collection_name=settings.chroma_collection_original,
     )
 
 
@@ -125,6 +146,64 @@ VectorStoreDependency = Annotated[
     ChromaVectorStore,
     Depends(get_vector_store),
 ]
+
+
+@lru_cache(maxsize=1)
+def _get_int8_store() -> VectorStore:
+    settings = get_settings()
+    inner = ChromaVectorStore(
+        persist_directory=str(settings.chroma_persist_dir),
+        collection_name=settings.chroma_collection_int8,
+    )
+    return CompressedVectorStore(inner_store=inner, compressor=Int8Compressor())
+
+
+@lru_cache(maxsize=1)
+def _get_binary_store() -> VectorStore:
+    settings = get_settings()
+    inner = ChromaVectorStore(
+        persist_directory=str(settings.chroma_persist_dir),
+        collection_name=settings.chroma_collection_binary,
+    )
+    return CompressedVectorStore(inner_store=inner, compressor=BinaryCompressor())
+
+
+@lru_cache(maxsize=1)
+def _get_pca_store() -> VectorStore:
+    """PCA treinado no corpus completo — espaço vetorial consistente.
+    Ver CorpusPcaStore para documentação do GAP 2."""
+    settings = get_settings()
+    inner = ChromaVectorStore(
+        persist_directory=str(settings.chroma_persist_dir),
+        collection_name=settings.chroma_collection_pca,
+    )
+    return CorpusPcaStore(
+        inner_store=inner,
+        target_dim=settings.chroma_pca_target_dim,
+    )
+
+
+@lru_cache(maxsize=1)
+def _get_rp_store() -> VectorStore:
+    settings = get_settings()
+    inner = ChromaVectorStore(
+        persist_directory=str(settings.chroma_persist_dir),
+        collection_name=settings.chroma_collection_rp,
+    )
+    return CompressedVectorStore(
+        inner_store=inner,
+        compressor=RandomProjectionCompressor(target_dim=settings.chroma_pca_target_dim),
+    )
+
+
+def _all_compressed_stores() -> list[StoreEntry]:
+    """Retorna todas as coleções comprimidas com seus métodos correspondentes."""
+    return [
+        (CompressionMethod.INT8, _get_int8_store()),
+        (CompressionMethod.BINARY, _get_binary_store()),
+        (CompressionMethod.PCA, _get_pca_store()),
+        (CompressionMethod.RANDOM_PROJECTION, _get_rp_store()),
+    ]
 
 
 # =============================================================
@@ -198,27 +277,31 @@ DocumentCrudUseCaseDependency = Annotated[
 
 def provide_ingestion_use_case(
     session: SessionDependency,
-    settings: SettingsDependency,
     vector_store: VectorStoreDependency,
-) -> IngestionUseCase:
-    splitter = RecursiveSplitter(
-        chunk_size=settings.rag_chunk_size,
-        chunk_overlap=settings.rag_chunk_overlap,
-    )
+) -> MultiCollectionIngestionUseCase:
+    """Use case de ingestão que grava na coleção original e nas 4 comprimidas."""
 
-    return IngestionUseCase(
+    settings = get_settings()
+    primary = IngestionUseCase(
         document_repository=SqlAlchemyDocumentRepository(session),
-        text_splitter=splitter,
-        vector_store=vector_store,
-        audit_repository=SqlAlchemyAuditRepository(
-            get_session_factory(),
+        text_splitter=RecursiveSplitter(
+            chunk_size=settings.rag_chunk_size,
+            chunk_overlap=settings.rag_chunk_overlap,
         ),
+        vector_store=vector_store,
+        audit_repository=SqlAlchemyAuditRepository(get_session_factory()),
         upload_max_bytes=settings.upload_max_bytes,
+    )
+    return MultiCollectionIngestionUseCase(
+        primary_ingestion=primary,
+        primary_vector_store=vector_store,
+        compressed_stores=_all_compressed_stores(),
+        document_repository=SqlAlchemyDocumentRepository(session),
     )
 
 
 IngestionUseCaseDependency = Annotated[
-    IngestionUseCase,
+    MultiCollectionIngestionUseCase,
     Depends(provide_ingestion_use_case),
 ]
 
@@ -300,6 +383,97 @@ MetricsUseCaseDependency = Annotated[
 ]
 
 
+def provide_compare_retrieval_use_case(
+    vector_store: VectorStoreDependency,
+) -> CompareRetrievalUseCase:
+    """Use case que compara retrieval entre a coleção original e as comprimidas."""
+    return CompareRetrievalUseCase(
+        original_store=vector_store,
+        compressed_stores=_all_compressed_stores(),
+        audit_repository=SqlAlchemyAuditRepository(get_session_factory()),
+    )
+
+
+CompareRetrievalUseCaseDependency = Annotated[
+    CompareRetrievalUseCase,
+    Depends(provide_compare_retrieval_use_case),
+]
+
+
+def resolve_vector_store_by_collection(collection: str) -> VectorStore:
+    """Resolve o VectorStore pelo nome da coleção.
+
+    Padrão Strategy: o router escolhe qual espaço vetorial usar
+    por request, sem alterar os singletons globais.
+    Fallback para a coleção original se o nome for desconhecido.
+    """
+    settings = get_settings()
+    collection_map: dict[str, VectorStore] = {
+        settings.chroma_collection_original: get_vector_store(),
+        settings.chroma_collection_int8: _get_int8_store(),
+        settings.chroma_collection_binary: _get_binary_store(),
+        settings.chroma_collection_rp: _get_rp_store(),
+        settings.chroma_collection_pca: _get_pca_store(),
+    }
+    return collection_map.get(collection, get_vector_store())
+
+
+def build_answer_use_case_for_store(store: VectorStore) -> AnswerUseCase:
+    """Constrói AnswerUseCase com o VectorStore escolhido pelo usuário.
+
+    Usado pelo router para suportar RAG em qualquer coleção
+    (original, int8, binary, rp, pca) sem mudar singletons.
+    """
+    settings = get_settings()
+    retrieval = RetrievalUseCase(
+        vector_store=store,
+        default_top_k=settings.rag_top_k,
+        default_similarity_threshold=settings.rag_similarity_threshold,
+    )
+    return AnswerUseCase(
+        retrieval_use_case=retrieval,
+        audit_repository=SqlAlchemyAuditRepository(get_session_factory()),
+    )
+
+
+def provide_compress_to_collection_use_case(method_name: str) -> CompressToCollectionUseCase:
+    """Factory de CompressToCollectionUseCase para o método escolhido.
+
+    Resolve o store comprimido alvo pelo nome do método.
+    Chamado pelo router com o parâmetro de rota {method}.
+    """
+    settings = get_settings()
+    store_map: dict[str, tuple[VectorStore, str]] = {
+        CompressionMethod.INT8.value: (
+            _get_int8_store(),
+            settings.chroma_collection_int8,
+        ),
+        CompressionMethod.BINARY.value: (
+            _get_binary_store(),
+            settings.chroma_collection_binary,
+        ),
+        CompressionMethod.PCA.value: (
+            _get_pca_store(),
+            settings.chroma_collection_pca,
+        ),
+        CompressionMethod.RANDOM_PROJECTION.value: (
+            _get_rp_store(),
+            settings.chroma_collection_rp,
+        ),
+    }
+    compressed_store, collection_name = store_map.get(
+        method_name,
+        (_get_int8_store(), settings.chroma_collection_int8),
+    )
+    return CompressToCollectionUseCase(
+        original_store=get_vector_store(),
+        compressed_store=compressed_store,
+        target_collection_name=collection_name,
+        document_repository=SqlAlchemyDocumentRepository(get_session_factory()()),
+        audit_repository=SqlAlchemyAuditRepository(get_session_factory()),
+    )
+
+
 # =============================================================
 # Autenticação via esquema Bearer (HTTPBearer)
 # =============================================================
@@ -332,7 +506,14 @@ def require_authenticated_user(
     request: Request,
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer_scheme)],
     token_service: TokenServiceDependency,
+    session: SessionDependency,
 ) -> TokenPayload:
+    """Valida o JWT e confirma que o usuário ainda existe no banco.
+
+    A dupla verificação (assinatura JWT + existência no banco) evita
+    ForeignKeyViolation quando o banco é resetado durante desenvolvimento
+    mas o cookie JWT ainda está ativo no browser.
+    """
     token = _extract_token(request, credentials)
     if token is None:
         raise HTTPException(
@@ -342,13 +523,26 @@ def require_authenticated_user(
         )
 
     try:
-        return token_service.verify(token)
+        payload = token_service.verify(token)
     except AuthenticationError as authentication_failure:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Sessão inválida ou expirada.",
             headers={"WWW-Authenticate": "Bearer"},
         ) from authentication_failure
+
+    # Confirma que o usuário ainda existe no banco.
+    # Evita ForeignKeyViolation quando o banco é recriado
+    # mas o cookie JWT anterior ainda está ativo.
+    user_repo = SqlAlchemyUserRepository(session)
+    if user_repo.find_by_id(payload.user_id) is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Sessão expirada. Faça login novamente.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    return payload
 
 
 CurrentTokenDependency = Annotated[TokenPayload, Depends(require_authenticated_user)]

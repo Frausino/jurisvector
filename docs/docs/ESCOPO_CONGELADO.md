@@ -1,8 +1,8 @@
-# Escopo Congelado — DocuVector Lite
+# Escopo Congelado — JurisVector
 
 | Campo | Valor |
 |---|---|
-| Projeto | DocuVector Lite |
+| Projeto | JurisVector |
 | Versão do escopo | 1.0 |
 | Data de congelamento | 25 de maio de 2026 |
 | Responsável | Davi Rosa F. |
@@ -16,7 +16,7 @@
 
 ## 1. Declaração de propósito
 
-DocuVector Lite é um portal web que permite a usuários autenticados enviar documentos textuais, indexá-los como embeddings vetoriais e consultá-los por linguagem natural, com demonstração observável de compressão de embeddings (PCA, Random Projection, Int8, Binary) e comparação cronometrada entre provedores de embedding remoto (OpenAI) e local (Sentence Transformers).
+JurisVector é um portal web que permite a usuários autenticados enviar documentos textuais, indexá-los como embeddings vetoriais e consultá-los por linguagem natural, com demonstração observável de compressão de embeddings (PCA, Random Projection, Int8, Binary) e comparação cronometrada entre provedores de embedding remoto (OpenAI) e local (Sentence Transformers).
 
 A versão 1.0 prioriza demonstrabilidade visual do trade-off entre custo, latência, espaço e fidelidade semântica, e atendimento integral dos requisitos da disciplina.
 

@@ -1,11 +1,11 @@
-# DocuVector Lite — Documento Mestre do Projeto
+# JurisVector — Documento Mestre do Projeto
 
 > **Trabalho final da disciplina de Desenvolvimento de Sistemas — CEUB**
 > Sistema RAG aplicado a documentos jurídicos com compressão observável de embeddings e benchmark de provedores.
 
 **Versão:** 1.0
 **Data:** 25/05/2026
-**Autor:** Davi Rosa F.
+**Autor:** Davi Rosa F. e Breno Manoel
 **Janela de execução:** 14 dias
 **Status:** Sprint 1 concluída
 
@@ -51,11 +51,11 @@ Profissionais do Direito lidam com volume crescente de documentos textuais. Loca
 
 Sistemas de **Retrieval-Augmented Generation (RAG)** resolvem essa busca semântica transformando o texto em representações vetoriais (embeddings) e recuperando trechos por similaridade matemática. Mas três custos ficam escondidos em RAGs didáticos:
 
-| Custo escondido | Explicação |
-|---|---|
-| **Memória dos embeddings** | Cada chunk vira um vetor de centenas ou milhares de floats de 32 bits. Em corpus grandes, isso vira gigabytes de RAM. |
-| **Custo financeiro do provedor** | Provedores como OpenAI cobram por token. Indexar 1000 documentos pode custar dezenas de dólares. |
-| **Trade-off qualidade vs privacidade** | Embedders remotos podem ser melhores, mas mandam o conteúdo do documento para terceiros. |
+| Custo escondido                        | Explicação                                                                                                            |
+| -------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| **Memória dos embeddings**             | Cada chunk vira um vetor de centenas ou milhares de floats de 32 bits. Em corpus grandes, isso vira gigabytes de RAM. |
+| **Custo financeiro do provedor**       | Provedores como OpenAI cobram por token. Indexar 1000 documentos pode custar dezenas de dólares.                      |
+| **Trade-off qualidade vs privacidade** | Embedders remotos podem ser melhores, mas mandam o conteúdo do documento para terceiros.                              |
 
 ### 2.2 A solução
 
@@ -156,12 +156,12 @@ Cada decisão abaixo foi tomada de forma deliberada e tem justificativa defensá
 
 **Decisão:** PCA, Random Projection, Quantização Int8, Quantização Binária.
 
-| Compressor | Tipo | Trade-off didático |
-|---|---|---|
-| PCA | Redução de dimensionalidade linear | Determinística, preserva variância, exige fit em batch |
+| Compressor        | Tipo                                  | Trade-off didático                                     |
+| ----------------- | ------------------------------------- | ------------------------------------------------------ |
+| PCA               | Redução de dimensionalidade linear    | Determinística, preserva variância, exige fit em batch |
 | Random Projection | Redução de dimensionalidade aleatória | Baseada em Johnson-Lindenstrauss, sem fit, mais rápida |
-| Int8 | Quantização sem redução de dimensão | Reduz 4x a RAM, preserva quase toda a qualidade |
-| Binary | Quantização extrema | Reduz 32x a RAM, perda de qualidade visível |
+| Int8              | Quantização sem redução de dimensão   | Reduz 4x a RAM, preserva quase toda a qualidade        |
+| Binary            | Quantização extrema                   | Reduz 32x a RAM, perda de qualidade visível            |
 
 Quatro algoritmos cobrem o espectro: dimensão vs precisão numérica vs tempo vs RAM.
 
@@ -189,81 +189,81 @@ Para cada tecnologia, explicamos: **o que faz**, **por que escolhemos**, **alter
 
 ### 4.1 Camada de aplicação
 
-| Tecnologia | Versão | Função | Alternativas | Onde aparece |
-|---|---|---|---|---|
-| **FastAPI** | 0.136.3 | Framework web ASGI; roteamento HTTP; geração automática de OpenAPI | Flask, Django + DRF, Litestar | `src/docuvector/api/`, `main.py` |
-| **Uvicorn** | 0.30+ | Servidor ASGI de produção; serve a aplicação FastAPI | Hypercorn, Daphne | comando `just dev` |
-| **Pydantic** | 2.7+ | Validação de dados, schemas, settings; tipagem forte em runtime | Marshmallow, attrs | Todos os schemas em `api/schemas/`, settings, schemas de domínio |
-| **Pydantic Settings** | 2.4+ | Validação de variáveis de ambiente com tipos | python-decouple, dynaconf | `src/docuvector/config/settings.py` |
-| **SlowAPI** | 0.1.9+ | Rate limit declarativo via decorators | starlette-limiter | Middleware em `/auth/login` |
-| **Jinja2** | 3.1+ | Template engine server-side | Mako, Chameleon | `src/docuvector/web/templates/` |
-| **python-multipart** | 0.0.9+ | Parse de uploads multipart/form-data | n/a (necessário para FastAPI uploads) | Endpoint de upload |
+| Tecnologia            | Versão  | Função                                                             | Alternativas                          | Onde aparece                                                     |
+| --------------------- | ------- | ------------------------------------------------------------------ | ------------------------------------- | ---------------------------------------------------------------- |
+| **FastAPI**           | 0.136.3 | Framework web ASGI; roteamento HTTP; geração automática de OpenAPI | Flask, Django + DRF, Litestar         | `src/docuvector/api/`, `main.py`                                 |
+| **Uvicorn**           | 0.30+   | Servidor ASGI de produção; serve a aplicação FastAPI               | Hypercorn, Daphne                     | comando `just dev`                                               |
+| **Pydantic**          | 2.7+    | Validação de dados, schemas, settings; tipagem forte em runtime    | Marshmallow, attrs                    | Todos os schemas em `api/schemas/`, settings, schemas de domínio |
+| **Pydantic Settings** | 2.4+    | Validação de variáveis de ambiente com tipos                       | python-decouple, dynaconf             | `src/docuvector/config/settings.py`                              |
+| **SlowAPI**           | 0.1.9+  | Rate limit declarativo via decorators                              | starlette-limiter                     | Middleware em `/auth/login`                                      |
+| **Jinja2**            | 3.1+    | Template engine server-side                                        | Mako, Chameleon                       | `src/docuvector/web/templates/`                                  |
+| **python-multipart**  | 0.0.9+  | Parse de uploads multipart/form-data                               | n/a (necessário para FastAPI uploads) | Endpoint de upload                                               |
 
 ### 4.2 Persistência
 
-| Tecnologia | Versão | Função | Alternativas | Onde aparece |
-|---|---|---|---|---|
-| **SQLAlchemy** | 2.0+ | ORM relacional, queries tipadas | Django ORM, Tortoise, raw SQL | `infrastructure/persistence/` |
-| **Alembic** | 1.13+ | Migrations versionadas | Yoyo, raw SQL | `migrations/` |
-| **psycopg (v3)** | 3.2+ | Driver PostgreSQL nativo | psycopg2, asyncpg | Driver no `DATABASE_URL` |
-| **PostgreSQL** | 16-alpine | Banco relacional principal | MySQL, SQLite | Container Docker, `docker/docker-compose.yml` |
-| **ChromaDB** | 0.5+ | Vector store persistente | FAISS, Qdrant, pgvector | `infrastructure/vector/chroma_vector_store.py` |
+| Tecnologia       | Versão    | Função                          | Alternativas                  | Onde aparece                                   |
+| ---------------- | --------- | ------------------------------- | ----------------------------- | ---------------------------------------------- |
+| **SQLAlchemy**   | 2.0+      | ORM relacional, queries tipadas | Django ORM, Tortoise, raw SQL | `infrastructure/persistence/`                  |
+| **Alembic**      | 1.13+     | Migrations versionadas          | Yoyo, raw SQL                 | `migrations/`                                  |
+| **psycopg (v3)** | 3.2+      | Driver PostgreSQL nativo        | psycopg2, asyncpg             | Driver no `DATABASE_URL`                       |
+| **PostgreSQL**   | 16-alpine | Banco relacional principal      | MySQL, SQLite                 | Container Docker, `docker/docker-compose.yml`  |
+| **ChromaDB**     | 0.5+      | Vector store persistente        | FAISS, Qdrant, pgvector       | `infrastructure/vector/chroma_vector_store.py` |
 
 ### 4.3 Segurança
 
-| Tecnologia | Versão | Função | Alternativas | Onde aparece |
-|---|---|---|---|---|
-| **passlib[bcrypt]** | 1.7+ | Hash de senha resistente a brute force | argon2-cffi (mais moderno) | `infrastructure/security/bcrypt_hasher.py` |
-| **python-jose** | 3.3+ | Geração e verificação de JWT | PyJWT, authlib | `infrastructure/security/jwt_service.py` |
-| **detect-secrets** | 1.5+ | SAST de segredos em código | gitleaks, trufflehog | Pre-commit hook |
-| **Bandit** | 1.7+ | SAST de código Python | semgrep | Pre-commit + CI |
-| **pip-audit** | 2.7+ | SCA via OSV.dev | safety (comercial), snyk (comercial) | CI + `just sca` |
-| **cyclonedx-bom** | 4.4+ | Geração de SBOM em formato CycloneDX | syft | CI artifact |
+| Tecnologia          | Versão | Função                                 | Alternativas                         | Onde aparece                               |
+| ------------------- | ------ | -------------------------------------- | ------------------------------------ | ------------------------------------------ |
+| **passlib[bcrypt]** | 1.7+   | Hash de senha resistente a brute force | argon2-cffi (mais moderno)           | `infrastructure/security/bcrypt_hasher.py` |
+| **python-jose**     | 3.3+   | Geração e verificação de JWT           | PyJWT, authlib                       | `infrastructure/security/jwt_service.py`   |
+| **detect-secrets**  | 1.5+   | SAST de segredos em código             | gitleaks, trufflehog                 | Pre-commit hook                            |
+| **Bandit**          | 1.7+   | SAST de código Python                  | semgrep                              | Pre-commit + CI                            |
+| **pip-audit**       | 2.7+   | SCA via OSV.dev                        | safety (comercial), snyk (comercial) | CI + `just sca`                            |
+| **cyclonedx-bom**   | 4.4+   | Geração de SBOM em formato CycloneDX   | syft                                 | CI artifact                                |
 
 ### 4.4 Embeddings e IA
 
-| Tecnologia | Versão | Função | Alternativas | Onde aparece |
-|---|---|---|---|---|
-| **sentence-transformers** | 5.0+ | Embeddings locais via modelos HuggingFace | direct transformers | `infrastructure/embeddings/sentence_transformers_provider.py` |
-| **transformers (HF)** | 5.0+ | Carrega modelos do HuggingFace Hub | n/a (dep de sentence-transformers) | Indireto |
-| **openai** | 1.40+ | SDK oficial para embeddings remotos e LLM | httpx direto | `infrastructure/embeddings/openai_provider.py`, LLM client |
-| **numpy** | 1.26+ | Matemática vetorial; arrays de embeddings | n/a (padrão de fato) | Toda a camada de compressão |
-| **scikit-learn** | 1.5+ | PCA, Random Projection, métricas | scipy, manual | `infrastructure/compression/pca_compressor.py`, `random_projection_compressor.py` |
-| **scipy** | 1.13+ | Pearson correlation para retenção semântica | manual | `application/compression_benchmark_use_case.py` |
+| Tecnologia                | Versão | Função                                      | Alternativas                       | Onde aparece                                                                      |
+| ------------------------- | ------ | ------------------------------------------- | ---------------------------------- | --------------------------------------------------------------------------------- |
+| **sentence-transformers** | 5.0+   | Embeddings locais via modelos HuggingFace   | direct transformers                | `infrastructure/embeddings/sentence_transformers_provider.py`                     |
+| **transformers (HF)**     | 5.0+   | Carrega modelos do HuggingFace Hub          | n/a (dep de sentence-transformers) | Indireto                                                                          |
+| **openai**                | 1.40+  | SDK oficial para embeddings remotos e LLM   | httpx direto                       | `infrastructure/embeddings/openai_provider.py`, LLM client                        |
+| **numpy**                 | 1.26+  | Matemática vetorial; arrays de embeddings   | n/a (padrão de fato)               | Toda a camada de compressão                                                       |
+| **scikit-learn**          | 1.5+   | PCA, Random Projection, métricas            | scipy, manual                      | `infrastructure/compression/pca_compressor.py`, `random_projection_compressor.py` |
+| **scipy**                 | 1.13+  | Pearson correlation para retenção semântica | manual                             | `application/compression_benchmark_use_case.py`                                   |
 
 ### 4.5 Extração de documentos
 
-| Tecnologia | Versão | Função | Alternativas | Onde aparece |
-|---|---|---|---|---|
-| **pypdf** | 6.10.2+ | Extração de texto de PDF | pdfplumber, pdfminer | `infrastructure/extraction/pypdf_extractor.py` |
+| Tecnologia | Versão  | Função                   | Alternativas         | Onde aparece                                   |
+| ---------- | ------- | ------------------------ | -------------------- | ---------------------------------------------- |
+| **pypdf**  | 6.10.2+ | Extração de texto de PDF | pdfplumber, pdfminer | `infrastructure/extraction/pypdf_extractor.py` |
 
 ### 4.6 Observabilidade
 
-| Tecnologia | Versão | Função | Alternativas | Onde aparece |
-|---|---|---|---|---|
-| **structlog** | 24.4+ | Logging estruturado em JSON | python-json-logger, loguru | `infrastructure/logging/structlog_config.py` |
+| Tecnologia    | Versão | Função                      | Alternativas               | Onde aparece                                 |
+| ------------- | ------ | --------------------------- | -------------------------- | -------------------------------------------- |
+| **structlog** | 24.4+  | Logging estruturado em JSON | python-json-logger, loguru | `infrastructure/logging/structlog_config.py` |
 
 ### 4.7 Qualidade de código
 
-| Tecnologia | Versão | Função | Alternativas | Onde aparece |
-|---|---|---|---|---|
-| **ruff** | 0.6+ | Lint + formatter (substitui flake8, black, isort, pylint) | combinação dos clássicos | `pyproject.toml`, pre-commit, CI |
-| **mypy** | 1.11+ | Tipagem estática strict | pyright, pyre | `pyproject.toml`, pre-commit, CI |
-| **pytest** | 9.0+ | Framework de testes | unittest, nose2 | `tests/` |
-| **pytest-cov** | 5.0+ | Cobertura de código (gate 70%) | coverage direto | CI |
-| **pytest-asyncio** | 1.0+ | Testar funções async | n/a (padrão) | `tests/conftest.py` |
-| **hypothesis** | 6.110+ | Testes baseados em propriedades | n/a | Testes de compressão |
+| Tecnologia         | Versão | Função                                                    | Alternativas             | Onde aparece                     |
+| ------------------ | ------ | --------------------------------------------------------- | ------------------------ | -------------------------------- |
+| **ruff**           | 0.6+   | Lint + formatter (substitui flake8, black, isort, pylint) | combinação dos clássicos | `pyproject.toml`, pre-commit, CI |
+| **mypy**           | 1.11+  | Tipagem estática strict                                   | pyright, pyre            | `pyproject.toml`, pre-commit, CI |
+| **pytest**         | 9.0+   | Framework de testes                                       | unittest, nose2          | `tests/`                         |
+| **pytest-cov**     | 5.0+   | Cobertura de código (gate 70%)                            | coverage direto          | CI                               |
+| **pytest-asyncio** | 1.0+   | Testar funções async                                      | n/a (padrão)             | `tests/conftest.py`              |
+| **hypothesis**     | 6.110+ | Testes baseados em propriedades                           | n/a                      | Testes de compressão             |
 
 ### 4.8 Infra e automação
 
-| Tecnologia | Versão | Função | Alternativas | Onde aparece |
-|---|---|---|---|---|
-| **uv** | 0.4+ | Gerenciador de dependências e venv | pip + venv, poetry, pdm | `just sync`, CI |
-| **Docker** | 20+ | Containerização | Podman | `docker/docker-compose.yml` |
-| **Docker Compose** | v2 | Orquestração multi-container | k8s (overkill) | `docker/docker-compose.yml` |
-| **just** | 1.30+ | Task runner declarativo | make, npm scripts | `justfile` |
-| **pre-commit** | 3.8+ | Hooks Git para qualidade local | husky (Node), lefthook | `.pre-commit-config.yaml` |
-| **GitHub Actions** | n/a | CI/CD | GitLab CI, Jenkins | `.github/workflows/ci.yml` |
+| Tecnologia         | Versão | Função                             | Alternativas            | Onde aparece                |
+| ------------------ | ------ | ---------------------------------- | ----------------------- | --------------------------- |
+| **uv**             | 0.4+   | Gerenciador de dependências e venv | pip + venv, poetry, pdm | `just sync`, CI             |
+| **Docker**         | 20+    | Containerização                    | Podman                  | `docker/docker-compose.yml` |
+| **Docker Compose** | v2     | Orquestração multi-container       | k8s (overkill)          | `docker/docker-compose.yml` |
+| **just**           | 1.30+  | Task runner declarativo            | make, npm scripts       | `justfile`                  |
+| **pre-commit**     | 3.8+   | Hooks Git para qualidade local     | husky (Node), lefthook  | `.pre-commit-config.yaml`   |
+| **GitHub Actions** | n/a    | CI/CD                              | GitLab CI, Jenkins      | `.github/workflows/ci.yml`  |
 
 ---
 
@@ -332,18 +332,18 @@ Para cada tecnologia, explicamos: **o que faz**, **por que escolhemos**, **alter
 
 **Mapeamento interface → implementação:**
 
-| Interface (domínio) | Implementação (infra) |
-|---|---|
-| `UserRepository` | `SqlAlchemyUserRepository` |
-| `DocumentRepository` | `SqlAlchemyDocumentRepository` |
-| `AuditRepository` | `SqlAlchemyAuditRepository` |
-| `VectorStore` | `ChromaVectorStore` |
-| `EmbeddingProvider` | `OpenAIEmbeddingProvider`, `SentenceTransformersEmbeddingProvider` |
-| `Compressor` | `PcaCompressor`, `RandomProjectionCompressor`, `Int8Compressor`, `BinaryCompressor` |
-| `DocumentExtractor` | `PyPdfExtractor`, `TxtExtractor`, `MdExtractor` |
-| `TextSplitter` | `RecursiveSplitter` |
-| `PasswordHasher` | `BcryptPasswordHasher` |
-| `TokenService` | `JwtTokenService` |
+| Interface (domínio)  | Implementação (infra)                                                               |
+| -------------------- | ----------------------------------------------------------------------------------- |
+| `UserRepository`     | `SqlAlchemyUserRepository`                                                          |
+| `DocumentRepository` | `SqlAlchemyDocumentRepository`                                                      |
+| `AuditRepository`    | `SqlAlchemyAuditRepository`                                                         |
+| `VectorStore`        | `ChromaVectorStore`                                                                 |
+| `EmbeddingProvider`  | `OpenAIEmbeddingProvider`, `SentenceTransformersEmbeddingProvider`                  |
+| `Compressor`         | `PcaCompressor`, `RandomProjectionCompressor`, `Int8Compressor`, `BinaryCompressor` |
+| `DocumentExtractor`  | `PyPdfExtractor`, `TxtExtractor`, `MdExtractor`                                     |
+| `TextSplitter`       | `RecursiveSplitter`                                                                 |
+| `PasswordHasher`     | `BcryptPasswordHasher`                                                              |
+| `TokenService`       | `JwtTokenService`                                                                   |
 
 #### Camada 4 — Apresentação (`src/docuvector/api/` e `src/docuvector/web/`)
 
@@ -358,13 +358,13 @@ Para cada tecnologia, explicamos: **o que faz**, **por que escolhemos**, **alter
 
 ### 5.3 Por que isso responde ao SOLID
 
-| Princípio SOLID | Como o projeto satisfaz |
-|---|---|
-| **S — Single Responsibility** | Cada classe (entidade, use case, repositório, compressor) tem uma única razão para mudar. |
-| **O — Open/Closed** | Adicionar um novo compressor (ex: Product Quantization) é criar nova classe implementando `Compressor`, sem tocar nas existentes. |
-| **L — Liskov** | Qualquer implementação de `EmbeddingProvider` pode substituir outra; o use case não percebe. |
-| **I — Interface Segregation** | Interfaces pequenas e específicas (`Compressor` não tem método de persistência; `VectorStore` não tem método de extração). |
-| **D — Dependency Inversion** | Use cases dependem de abstrações (interfaces de domínio), não de concreções (SQLAlchemy, Chroma). |
+| Princípio SOLID               | Como o projeto satisfaz                                                                                                           |
+| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| **S — Single Responsibility** | Cada classe (entidade, use case, repositório, compressor) tem uma única razão para mudar.                                         |
+| **O — Open/Closed**           | Adicionar um novo compressor (ex: Product Quantization) é criar nova classe implementando `Compressor`, sem tocar nas existentes. |
+| **L — Liskov**                | Qualquer implementação de `EmbeddingProvider` pode substituir outra; o use case não percebe.                                      |
+| **I — Interface Segregation** | Interfaces pequenas e específicas (`Compressor` não tem método de persistência; `VectorStore` não tem método de extração).        |
+| **D — Dependency Inversion**  | Use cases dependem de abstrações (interfaces de domínio), não de concreções (SQLAlchemy, Chroma).                                 |
 
 ### 5.4 Por que isso responde ao "tira nota" da banca
 
@@ -395,44 +395,44 @@ docuvector-lite/
 
 #### Raiz do projeto
 
-| Arquivo | Função |
-|---|---|
-| `pyproject.toml` | Define dependências, scripts, configurações de ruff/mypy/bandit/pytest |
-| `justfile` | Receitas de tarefas locais (just sync, just ci, just up, just dev) |
-| `.pre-commit-config.yaml` | Hooks que rodam antes de cada commit |
-| `.env.example` | Template de variáveis de ambiente; vai para o Git |
-| `.env` | Variáveis de ambiente reais; **nunca vai para o Git** |
-| `.gitignore` | Arquivos ignorados pelo Git |
-| `.pip-audit.toml` | Allowlist documentada de CVEs aceitos como risco residual |
-| `.secrets.baseline` | Baseline do detect-secrets (falsos positivos conhecidos) |
-| `alembic.ini` | Configuração do Alembic |
-| `README.md` | Apresentação do projeto e guia de uso |
+| Arquivo                   | Função                                                                 |
+| ------------------------- | ---------------------------------------------------------------------- |
+| `pyproject.toml`          | Define dependências, scripts, configurações de ruff/mypy/bandit/pytest |
+| `justfile`                | Receitas de tarefas locais (just sync, just ci, just up, just dev)     |
+| `.pre-commit-config.yaml` | Hooks que rodam antes de cada commit                                   |
+| `.env.example`            | Template de variáveis de ambiente; vai para o Git                      |
+| `.env`                    | Variáveis de ambiente reais; **nunca vai para o Git**                  |
+| `.gitignore`              | Arquivos ignorados pelo Git                                            |
+| `.pip-audit.toml`         | Allowlist documentada de CVEs aceitos como risco residual              |
+| `.secrets.baseline`       | Baseline do detect-secrets (falsos positivos conhecidos)               |
+| `alembic.ini`             | Configuração do Alembic                                                |
+| `README.md`               | Apresentação do projeto e guia de uso                                  |
 
 #### Docker (`docker/`)
 
-| Arquivo | Função |
-|---|---|
+| Arquivo              | Função                                                        |
+| -------------------- | ------------------------------------------------------------- |
 | `docker-compose.yml` | Sobe PostgreSQL 16 com healthcheck, SCRAM auth, hardening CIS |
-| `postgres/init.sql` | Cria extensões `uuid-ossp` e `citext` no boot do banco |
+| `postgres/init.sql`  | Cria extensões `uuid-ossp` e `citext` no boot do banco        |
 
 #### Documentação (`docs/`)
 
-| Arquivo | Função |
-|---|---|
-| `ESCOPO_CONGELADO.md` | Contrato do que entra e do que não entra na v1.0 |
-| `BRD.md` | Business Requirements Document |
-| `SRS.md` | Software Requirements Specification (IEEE 830) |
-| `ARCHITECTURE.md` | Documento arquitetural detalhado |
-| `SECURITY_THREAT_MODEL.md` | STRIDE + OWASP + NIST + log SCA |
-| `EVIDENCIAS.md` | Documento de evidências para o professor |
-| `PROJETO_COMPLETO.md` | Este documento mestre |
-| `REPO_STRUCTURE.md` | Árvore canônica e bootstrap |
-| `diagrams/use_case.puml` | Diagrama de casos de uso |
-| `diagrams/er.puml` | Entidade-Relacionamento |
-| `diagrams/class.puml` | Classes nas 4 camadas |
-| `diagrams/sequence_ingestion.puml` | Sequência da ingestão |
-| `diagrams/sequence_query.puml` | Sequência da query |
-| `diagrams/security_dfd.puml` | DFD com trust boundaries |
+| Arquivo                            | Função                                           |
+| ---------------------------------- | ------------------------------------------------ |
+| `ESCOPO_CONGELADO.md`              | Contrato do que entra e do que não entra na v1.0 |
+| `BRD.md`                           | Business Requirements Document                   |
+| `SRS.md`                           | Software Requirements Specification (IEEE 830)   |
+| `ARCHITECTURE.md`                  | Documento arquitetural detalhado                 |
+| `SECURITY_THREAT_MODEL.md`         | STRIDE + OWASP + NIST + log SCA                  |
+| `EVIDENCIAS.md`                    | Documento de evidências para o professor         |
+| `PROJETO_COMPLETO.md`              | Este documento mestre                            |
+| `REPO_STRUCTURE.md`                | Árvore canônica e bootstrap                      |
+| `diagrams/use_case.puml`           | Diagrama de casos de uso                         |
+| `diagrams/er.puml`                 | Entidade-Relacionamento                          |
+| `diagrams/class.puml`              | Classes nas 4 camadas                            |
+| `diagrams/sequence_ingestion.puml` | Sequência da ingestão                            |
+| `diagrams/sequence_query.puml`     | Sequência da query                               |
+| `diagrams/security_dfd.puml`       | DFD com trust boundaries                         |
 
 #### Código-fonte (`src/docuvector/`)
 
@@ -539,8 +539,8 @@ web/routes.py ──┘                                       │
 
 ### 6.4 Scripts (`scripts/`)
 
-| Arquivo | Função |
-|---|---|
+| Arquivo         | Função                                                      |
+| --------------- | ----------------------------------------------------------- |
 | `seed_users.py` | Cria admin + user1 + user2 a partir de `.env`. Idempotente. |
 
 ### 6.5 Testes (`tests/`)
@@ -675,13 +675,13 @@ tests/
 
 Cinco tabelas. Detalhes em `docs/diagrams/er.puml`.
 
-| Tabela | Função | Cardinalidade |
-|---|---|---|
-| `users` | Autenticação e roles (admin, user) | 1 user → N documents |
-| `documents` | Metadados de documentos + estado de indexação | 1 document → N chunks (em Chroma) |
-| `queries` | Histórico de perguntas com respostas e tempos | N queries → 1 document |
-| `compression_benchmarks` | Resultados dos 4 compressores por documento | 4 benchmarks → 1 document |
-| `audit_logs` | Auditoria de ações sensíveis | N events → 0..1 user |
+| Tabela                   | Função                                        | Cardinalidade                     |
+| ------------------------ | --------------------------------------------- | --------------------------------- |
+| `users`                  | Autenticação e roles (admin, user)            | 1 user → N documents              |
+| `documents`              | Metadados de documentos + estado de indexação | 1 document → N chunks (em Chroma) |
+| `queries`                | Histórico de perguntas com respostas e tempos | N queries → 1 document            |
+| `compression_benchmarks` | Resultados dos 4 compressores por documento   | 4 benchmarks → 1 document         |
+| `audit_logs`             | Auditoria de ações sensíveis                  | N events → 0..1 user              |
 
 ### 8.2 Vector store (ChromaDB)
 
@@ -747,53 +747,53 @@ Detalhes completos em `docs/SECURITY_THREAT_MODEL.md`. Resumo conceitual aqui.
 
 ### 9.3 Catálogo de práticas DevSecOps aplicadas
 
-| Prática | Ferramenta | Onde roda | O que detecta |
-|---|---|---|---|
-| **SAST** (Static Application Security Testing) | Bandit | pre-commit + CI | Padrões inseguros em Python (eval, exec, hardcoded passwords, weak crypto) |
-| **SCA** (Software Composition Analysis) | pip-audit (OSV.dev) | CI + `just sca` | CVEs em dependências diretas e transitivas |
-| **Secret scanning** | detect-secrets, detect-private-key | pre-commit | API keys, tokens, chaves privadas comitadas |
-| **SBOM** (Software Bill of Materials) | cyclonedx-py | CI | Inventário completo de dependências para rastreabilidade |
-| **Tipagem estática** | mypy strict + plugin Pydantic | pre-commit + CI | Bugs estruturais antes do runtime |
-| **Lint de segurança** | ruff (regras S = flake8-bandit, B = bugbear) | pre-commit + CI | Anti-padrões em Python |
-| **Validação de input** | Pydantic v2 com `model_config` restritivo | runtime em todo endpoint | Tipos errados, mass assignment, payload malicioso |
-| **Rate limiting** | SlowAPI | runtime no `/auth/login` | Brute force de senha |
-| **Hash de senha** | bcrypt cost 12 | runtime em registro/login | Reverter hash via brute force |
-| **Auth token assinado** | JWT HS256 com segredo ≥ 32 bytes | runtime | Forjamento de identidade |
-| **Audit logging** | structlog + tabela `audit_logs` | runtime | Repúdio de ação, rastreabilidade |
-| **Container hardening** | docker-compose com `no-new-privileges`, `cap_drop: ALL` | container | Escape de container |
-| **Princípio do menor privilégio (CI)** | `permissions: contents: read` no workflow | CI | Workflow malicioso reescrevendo main |
-| **Pinning de dependências** | uv.lock | sempre | Supply chain via versão maliciosa surpresa |
-| **Threat model documentado** | Markdown em `docs/` | revisão manual | Lacunas conceituais |
+| Prática                                        | Ferramenta                                              | Onde roda                 | O que detecta                                                              |
+| ---------------------------------------------- | ------------------------------------------------------- | ------------------------- | -------------------------------------------------------------------------- |
+| **SAST** (Static Application Security Testing) | Bandit                                                  | pre-commit + CI           | Padrões inseguros em Python (eval, exec, hardcoded passwords, weak crypto) |
+| **SCA** (Software Composition Analysis)        | pip-audit (OSV.dev)                                     | CI + `just sca`           | CVEs em dependências diretas e transitivas                                 |
+| **Secret scanning**                            | detect-secrets, detect-private-key                      | pre-commit                | API keys, tokens, chaves privadas comitadas                                |
+| **SBOM** (Software Bill of Materials)          | cyclonedx-py                                            | CI                        | Inventário completo de dependências para rastreabilidade                   |
+| **Tipagem estática**                           | mypy strict + plugin Pydantic                           | pre-commit + CI           | Bugs estruturais antes do runtime                                          |
+| **Lint de segurança**                          | ruff (regras S = flake8-bandit, B = bugbear)            | pre-commit + CI           | Anti-padrões em Python                                                     |
+| **Validação de input**                         | Pydantic v2 com `model_config` restritivo               | runtime em todo endpoint  | Tipos errados, mass assignment, payload malicioso                          |
+| **Rate limiting**                              | SlowAPI                                                 | runtime no `/auth/login`  | Brute force de senha                                                       |
+| **Hash de senha**                              | bcrypt cost 12                                          | runtime em registro/login | Reverter hash via brute force                                              |
+| **Auth token assinado**                        | JWT HS256 com segredo ≥ 32 bytes                        | runtime                   | Forjamento de identidade                                                   |
+| **Audit logging**                              | structlog + tabela `audit_logs`                         | runtime                   | Repúdio de ação, rastreabilidade                                           |
+| **Container hardening**                        | docker-compose com `no-new-privileges`, `cap_drop: ALL` | container                 | Escape de container                                                        |
+| **Princípio do menor privilégio (CI)**         | `permissions: contents: read` no workflow               | CI                        | Workflow malicioso reescrevendo main                                       |
+| **Pinning de dependências**                    | uv.lock                                                 | sempre                    | Supply chain via versão maliciosa surpresa                                 |
+| **Threat model documentado**                   | Markdown em `docs/`                                     | revisão manual            | Lacunas conceituais                                                        |
 
 ### 9.4 Mapeamento OWASP API Top 10 (2023)
 
-| OWASP API | Mitigação no DocuVector Lite | Coberto |
-|---|---|---|
-| API1: BOLA | Filtro `owner_id` em SQL e Chroma; HTTP 404 ao invasor; audit forbidden | ✓ |
-| API2: Broken Auth | bcrypt 12 + JWT + rate limit + erro genérico | ✓ |
-| API3: Broken Property Level Auth | Schemas Pydantic não expõem `role`, `owner_id`, `status` | ✓ |
-| API4: Unrestricted Resource Consumption | Upload ≤ 10 MB; rate limit; modelo LLM barato | ✓ |
-| API5: Broken Function Level Auth | Dependency `require_admin` em rotas administrativas | ✓ |
-| API6: Sensitive Business Flow | Não aplicável (sem fluxos de pagamento) | N/A |
-| API7: SSRF | Aplicação não fetcha URLs do usuário | N/A |
-| API8: Security Misconfiguration | Postgres SCRAM, CORS restrito, settings com validators | ✓ |
-| API9: Improper Inventory | SBOM CycloneDX, API versionada `/api/v1/` | ✓ |
-| API10: Unsafe API Consumption | Resposta OpenAI tratada como string opaca, nunca interpretada | ✓ |
+| OWASP API                               | Mitigação no DocuVector Lite                                            | Coberto |
+| --------------------------------------- | ----------------------------------------------------------------------- | ------- |
+| API1: BOLA                              | Filtro `owner_id` em SQL e Chroma; HTTP 404 ao invasor; audit forbidden | ✓       |
+| API2: Broken Auth                       | bcrypt 12 + JWT + rate limit + erro genérico                            | ✓       |
+| API3: Broken Property Level Auth        | Schemas Pydantic não expõem `role`, `owner_id`, `status`                | ✓       |
+| API4: Unrestricted Resource Consumption | Upload ≤ 10 MB; rate limit; modelo LLM barato                           | ✓       |
+| API5: Broken Function Level Auth        | Dependency `require_admin` em rotas administrativas                     | ✓       |
+| API6: Sensitive Business Flow           | Não aplicável (sem fluxos de pagamento)                                 | N/A     |
+| API7: SSRF                              | Aplicação não fetcha URLs do usuário                                    | N/A     |
+| API8: Security Misconfiguration         | Postgres SCRAM, CORS restrito, settings com validators                  | ✓       |
+| API9: Improper Inventory                | SBOM CycloneDX, API versionada `/api/v1/`                               | ✓       |
+| API10: Unsafe API Consumption           | Resposta OpenAI tratada como string opaca, nunca interpretada           | ✓       |
 
 ### 9.5 Mapeamento NIST SSDF (SP 800-218)
 
-| Prática SSDF | Implementação |
-|---|---|
-| PS.1 Proteger o código | Git + pre-commit barrando código não conforme |
-| PS.2 Verificar integridade | SBOM CycloneDX gerada e arquivada no CI |
-| PW.4 Reusar software seguro | Stack open source bem mantida, sem criptografia caseira |
-| PW.5 Código aderente a práticas seguras | ruff (regras S), bandit |
-| PW.6 Build e segredos seguros | `.env` fora do Git, detect-secrets no pre-commit |
-| PW.7 Revisão de código | Pre-commit + CI com SAST e mypy strict |
-| PW.8 Teste de vulnerabilidades | Testes de autorização (BOLA) automatizados |
-| PW.9 Configuração segura por default | `.env.example` com valores seguros, CORS restrito |
-| RV.1 Identificação contínua | pip-audit no CI a cada push |
-| RV.2 Resposta a vulnerabilidades | Política: CVE CRITICAL bloqueia merge; HIGH gera issue. Log SCA em `SECURITY_THREAT_MODEL.md` seção 13 |
+| Prática SSDF                            | Implementação                                                                                          |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| PS.1 Proteger o código                  | Git + pre-commit barrando código não conforme                                                          |
+| PS.2 Verificar integridade              | SBOM CycloneDX gerada e arquivada no CI                                                                |
+| PW.4 Reusar software seguro             | Stack open source bem mantida, sem criptografia caseira                                                |
+| PW.5 Código aderente a práticas seguras | ruff (regras S), bandit                                                                                |
+| PW.6 Build e segredos seguros           | `.env` fora do Git, detect-secrets no pre-commit                                                       |
+| PW.7 Revisão de código                  | Pre-commit + CI com SAST e mypy strict                                                                 |
+| PW.8 Teste de vulnerabilidades          | Testes de autorização (BOLA) automatizados                                                             |
+| PW.9 Configuração segura por default    | `.env.example` com valores seguros, CORS restrito                                                      |
+| RV.1 Identificação contínua             | pip-audit no CI a cada push                                                                            |
+| RV.2 Resposta a vulnerabilidades        | Política: CVE CRITICAL bloqueia merge; HIGH gera issue. Log SCA em `SECURITY_THREAT_MODEL.md` seção 13 |
 
 ---
 
@@ -853,16 +853,16 @@ Detalhes completos em `docs/SECURITY_THREAT_MODEL.md`. Resumo conceitual aqui.
 
 Nada vai para `main` se algum gate falhar. Isso é configurável em GitHub branch protection rules (Sprint 8).
 
-| Gate | Critério |
-|---|---|
-| Lint | ruff sem erros |
-| Format | ruff format check sem diff |
-| Type | mypy strict sem erros |
-| SAST | Bandit sem HIGH/CRITICAL |
-| SCA | pip-audit sem CVE CRITICAL não-allowlisted |
-| Secrets | detect-secrets sem novos segredos |
-| Tests | pytest 100% green com coverage ≥ 70% (a partir Sprint 6) |
-| SBOM | Gera sem erro |
+| Gate    | Critério                                                 |
+| ------- | -------------------------------------------------------- |
+| Lint    | ruff sem erros                                           |
+| Format  | ruff format check sem diff                               |
+| Type    | mypy strict sem erros                                    |
+| SAST    | Bandit sem HIGH/CRITICAL                                 |
+| SCA     | pip-audit sem CVE CRITICAL não-allowlisted               |
+| Secrets | detect-secrets sem novos segredos                        |
+| Tests   | pytest 100% green com coverage ≥ 70% (a partir Sprint 6) |
+| SBOM    | Gera sem erro                                            |
 
 ### 10.3 Reprodutibilidade local
 
@@ -1227,17 +1227,17 @@ Para qualquer array sintético de embeddings (N entre 50 e 500, dim entre 100 e 
 
 > **Audiência:** professor super exigente, banca. **Tom:** sério, denso, mas com momentos de impacto visual.
 
-| Tempo | Cena | Mensagem-chave |
-|---|---|---|
-| 0:00–0:30 | Abertura | Problema: documentos jurídicos viram conhecimento caro. Solução: portal RAG com custos visíveis. |
-| 0:30–1:00 | Login | Segurança visível: bcrypt 12, JWT, audit. |
-| 1:00–2:00 | Upload de contrato | Pipeline em tempo real: extract → chunk → embed → persist. |
-| 2:00–4:30 | **Benchmark de compressão** | 4 métodos lado a lado, métricas reais sobre o documento da banca. Trade-off explicado. |
-| 4:30–6:30 | **Benchmark de embedders** | Mesma pergunta, OpenAI vs local, cronômetro vivo. Custo vs latência vs privacidade. |
-| 6:30–7:30 | Chat jurídico | Pergunta sobre cláusula, resposta com fontes citadas (chunk + score). |
-| 7:30–8:30 | Admin + auditoria | Troca de conta, mostra audit log com status=forbidden de tentativa de acesso. |
-| 8:30–9:30 | Engenharia | CI verde, Swagger, testes, SBOM, threat model, .pip-audit.toml com decisão registrada. |
-| 9:30–10:00 | Fechamento | "Atendi ao edital, entreguei diferencial, segui Clean Architecture, apliquei DevSecOps real. Aqui está o threat model com 38 ameaças catalogadas." |
+| Tempo      | Cena                        | Mensagem-chave                                                                                                                                     |
+| ---------- | --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0:00–0:30  | Abertura                    | Problema: documentos jurídicos viram conhecimento caro. Solução: portal RAG com custos visíveis.                                                   |
+| 0:30–1:00  | Login                       | Segurança visível: bcrypt 12, JWT, audit.                                                                                                          |
+| 1:00–2:00  | Upload de contrato          | Pipeline em tempo real: extract → chunk → embed → persist.                                                                                         |
+| 2:00–4:30  | **Benchmark de compressão** | 4 métodos lado a lado, métricas reais sobre o documento da banca. Trade-off explicado.                                                             |
+| 4:30–6:30  | **Benchmark de embedders**  | Mesma pergunta, OpenAI vs local, cronômetro vivo. Custo vs latência vs privacidade.                                                                |
+| 6:30–7:30  | Chat jurídico               | Pergunta sobre cláusula, resposta com fontes citadas (chunk + score).                                                                              |
+| 7:30–8:30  | Admin + auditoria           | Troca de conta, mostra audit log com status=forbidden de tentativa de acesso.                                                                      |
+| 8:30–9:30  | Engenharia                  | CI verde, Swagger, testes, SBOM, threat model, .pip-audit.toml com decisão registrada.                                                             |
+| 9:30–10:00 | Fechamento                  | "Atendi ao edital, entreguei diferencial, segui Clean Architecture, apliquei DevSecOps real. Aqui está o threat model com 38 ameaças catalogadas." |
 
 ### 14.1 Frases de defesa pré-prontas
 
@@ -1253,36 +1253,36 @@ Para qualquer array sintético de embeddings (N entre 50 e 500, dim entre 100 e 
 
 ## 15. Glossário técnico
 
-| Termo | Definição |
-|---|---|
-| **RAG** | Retrieval-Augmented Generation. Combina recuperação de trechos + geração via LLM. |
-| **Embedding** | Vetor numérico de alta dimensão que representa o significado semântico de um texto. |
-| **Chunk** | Trecho de texto resultado da segmentação de um documento original. |
-| **Cosine similarity** | Métrica de similaridade entre dois vetores. Vale 1 (idênticos) a -1 (opostos). |
-| **PCA** | Principal Component Analysis. Projeção linear que preserva variância. |
-| **Random Projection** | Projeção aleatória baseada no Lemma de Johnson-Lindenstrauss. |
-| **Quantização Int8** | Mapear float32 para inteiros de 8 bits. Reduz 4x a RAM. |
-| **Quantização Binária** | Mapear float32 para 1 bit (sinal). Reduz 32x a RAM. |
-| **Retenção semântica** | Métrica que quantifica quanto a similaridade entre pares é preservada após compressão. |
-| **HNSW** | Hierarchical Navigable Small World. Algoritmo padrão de ANN. |
-| **ANN** | Approximate Nearest Neighbor. Busca por vizinhos próximos sem garantia exata. |
-| **JWT** | JSON Web Token. Padrão de token assinado para autenticação. |
-| **bcrypt** | Algoritmo de hash de senha com salt e cost factor configurável. |
-| **OWASP API Top 10** | Top 10 das vulnerabilidades em APIs, mantido pela OWASP Foundation. |
-| **STRIDE** | Spoofing, Tampering, Repudiation, Info Disclosure, DoS, Elevation. Metodologia da Microsoft. |
-| **NIST SSDF** | Secure Software Development Framework. Padrão americano de governo. |
-| **SAST** | Static Application Security Testing. Análise de código fonte. |
-| **SCA** | Software Composition Analysis. Análise de dependências. |
-| **SBOM** | Software Bill of Materials. Inventário formal de dependências. |
-| **BOLA** | Broken Object Level Authorization. Falha clássica em APIs. |
-| **mass assignment** | Vulnerabilidade onde input do usuário sobrescreve campos sensíveis. |
-| **CycloneDX** | Padrão de formato de SBOM mantido pela OWASP. |
-| **trust boundary** | Fronteira no DFD onde nível de confiança muda. |
-| **shift-left** | Mover controles de qualidade/segurança para mais cedo no ciclo. |
-| **defense in depth** | Múltiplas camadas de defesa redundantes. |
-| **Dependency Rule** | Regra do Clean Architecture: dependências apontam para dentro. |
-| **DI (Dependency Injection)** | Injetar dependências via construtor em vez de instanciar internamente. |
-| **idempotência** | Propriedade onde executar a operação N vezes tem o mesmo efeito que executar uma vez. |
+| Termo                         | Definição                                                                                    |
+| ----------------------------- | -------------------------------------------------------------------------------------------- |
+| **RAG**                       | Retrieval-Augmented Generation. Combina recuperação de trechos + geração via LLM.            |
+| **Embedding**                 | Vetor numérico de alta dimensão que representa o significado semântico de um texto.          |
+| **Chunk**                     | Trecho de texto resultado da segmentação de um documento original.                           |
+| **Cosine similarity**         | Métrica de similaridade entre dois vetores. Vale 1 (idênticos) a -1 (opostos).               |
+| **PCA**                       | Principal Component Analysis. Projeção linear que preserva variância.                        |
+| **Random Projection**         | Projeção aleatória baseada no Lemma de Johnson-Lindenstrauss.                                |
+| **Quantização Int8**          | Mapear float32 para inteiros de 8 bits. Reduz 4x a RAM.                                      |
+| **Quantização Binária**       | Mapear float32 para 1 bit (sinal). Reduz 32x a RAM.                                          |
+| **Retenção semântica**        | Métrica que quantifica quanto a similaridade entre pares é preservada após compressão.       |
+| **HNSW**                      | Hierarchical Navigable Small World. Algoritmo padrão de ANN.                                 |
+| **ANN**                       | Approximate Nearest Neighbor. Busca por vizinhos próximos sem garantia exata.                |
+| **JWT**                       | JSON Web Token. Padrão de token assinado para autenticação.                                  |
+| **bcrypt**                    | Algoritmo de hash de senha com salt e cost factor configurável.                              |
+| **OWASP API Top 10**          | Top 10 das vulnerabilidades em APIs, mantido pela OWASP Foundation.                          |
+| **STRIDE**                    | Spoofing, Tampering, Repudiation, Info Disclosure, DoS, Elevation. Metodologia da Microsoft. |
+| **NIST SSDF**                 | Secure Software Development Framework. Padrão americano de governo.                          |
+| **SAST**                      | Static Application Security Testing. Análise de código fonte.                                |
+| **SCA**                       | Software Composition Analysis. Análise de dependências.                                      |
+| **SBOM**                      | Software Bill of Materials. Inventário formal de dependências.                               |
+| **BOLA**                      | Broken Object Level Authorization. Falha clássica em APIs.                                   |
+| **mass assignment**           | Vulnerabilidade onde input do usuário sobrescreve campos sensíveis.                          |
+| **CycloneDX**                 | Padrão de formato de SBOM mantido pela OWASP.                                                |
+| **trust boundary**            | Fronteira no DFD onde nível de confiança muda.                                               |
+| **shift-left**                | Mover controles de qualidade/segurança para mais cedo no ciclo.                              |
+| **defense in depth**          | Múltiplas camadas de defesa redundantes.                                                     |
+| **Dependency Rule**           | Regra do Clean Architecture: dependências apontam para dentro.                               |
+| **DI (Dependency Injection)** | Injetar dependências via construtor em vez de instanciar internamente.                       |
+| **idempotência**              | Propriedade onde executar a operação N vezes tem o mesmo efeito que executar uma vez.        |
 
 ---
 
