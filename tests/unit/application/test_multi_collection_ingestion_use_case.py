@@ -204,22 +204,30 @@ def _make_ingestion_result(was_already_ingested: bool = False) -> IngestionResul
 # Testes
 # =============================================================
 @pytest.mark.unit
-def test_ingest_replica_em_todas_as_colecoes_comprimidas() -> None:
+def test_ingest_nao_popula_colecoes_comprimidas() -> None:
     rng = np.random.default_rng(seed=0)
     vectors = rng.standard_normal((4, _DIMS)).astype(np.float32)
+
     primary_result = _make_ingestion_result()
     primary_store = _FakeVectorStoreWithVectors(vectors)
+
     int8_store = _RecordingCompressedStore()
     binary_store = _RecordingCompressedStore()
 
     use_case = MultiCollectionIngestionUseCase(
-        primary_ingestion=cast("IngestionUseCase", _FakePrimaryIngestion(primary_result)),
+        primary_ingestion=cast(
+            "IngestionUseCase",
+            _FakePrimaryIngestion(primary_result),
+        ),
         primary_vector_store=primary_store,
         compressed_stores=[
             (CompressionMethod.INT8, int8_store),
             (CompressionMethod.BINARY, binary_store),
         ],
-        document_repository=cast("DocumentRepository", _FakeDocumentRepository()),
+        document_repository=cast(
+            "DocumentRepository",
+            _FakeDocumentRepository(),
+        ),
     )
 
     result = use_case.ingest(
@@ -232,24 +240,35 @@ def test_ingest_replica_em_todas_as_colecoes_comprimidas() -> None:
     )
 
     assert result.all_collections_succeeded
-    assert len(int8_store.added_chunks) == 4
-    assert len(binary_store.added_chunks) == 4
+    assert int8_store.added_chunks == []
+    assert binary_store.added_chunks == []
 
 
 @pytest.mark.unit
-def test_ingest_falha_isolada_nao_aborta_ingestao_principal() -> None:
+def test_ingest_nao_replica_para_colecoes_comprimidas() -> None:
+    """Nova arquitetura: ingestão grava apenas na coleção original."""
+
     rng = np.random.default_rng(seed=1)
     vectors = rng.standard_normal((3, _DIMS)).astype(np.float32)
+
     primary_result = _make_ingestion_result()
     primary_store = _FakeVectorStoreWithVectors(vectors)
 
+    failing_store = _FailingCompressedStore()
+
     use_case = MultiCollectionIngestionUseCase(
-        primary_ingestion=cast("IngestionUseCase", _FakePrimaryIngestion(primary_result)),
+        primary_ingestion=cast(
+            "IngestionUseCase",
+            _FakePrimaryIngestion(primary_result),
+        ),
         primary_vector_store=primary_store,
         compressed_stores=[
-            (CompressionMethod.INT8, _FailingCompressedStore()),
+            (CompressionMethod.INT8, failing_store),
         ],
-        document_repository=cast("DocumentRepository", _FakeDocumentRepository()),
+        document_repository=cast(
+            "DocumentRepository",
+            _FakeDocumentRepository(),
+        ),
     )
 
     result = use_case.ingest(
@@ -262,9 +281,8 @@ def test_ingest_falha_isolada_nao_aborta_ingestao_principal() -> None:
     )
 
     assert result.primary_result == primary_result
-    assert not result.all_collections_succeeded
-    assert len(result.side_collection_errors) == 1
-    assert result.side_collection_errors[0].method is CompressionMethod.INT8
+    assert result.all_collections_succeeded
+    assert result.side_collection_errors == ()
 
 
 @pytest.mark.unit
