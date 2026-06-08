@@ -26,6 +26,14 @@ import httpx
 
 from docuvector.domain.exceptions import LlmGenerationError
 from docuvector.domain.interfaces.llm_client import LlmCompletion
+from docuvector.infrastructure.llm.ollama_performance_registry import (
+    OllamaPerformanceRegistry,
+)
+from docuvector.infrastructure.llm.request_scheduler import RequestScheduler
+
+_scheduler = RequestScheduler(max_concurrent_requests=1)
+
+_registry = OllamaPerformanceRegistry()
 
 
 class OllamaLlmClient:
@@ -65,20 +73,48 @@ class OllamaLlmClient:
         }
 
         request_started_at = time.perf_counter()
+
         try:
-            response = httpx.post(
-                f"{self._base_url}/api/chat",
-                json=request_payload,
-                timeout=self._timeout_seconds,
-            )
+            with _scheduler.acquire():
+                response = httpx.post(
+                    f"{self._base_url}/api/chat",
+                    json=request_payload,
+                    timeout=httpx.Timeout(
+                        connect=10.0,
+                        read=self._timeout_seconds,
+                        write=30.0,
+                        pool=30.0,
+                    ),
+                )
+
             response.raise_for_status()
+
         except httpx.HTTPError as ollama_failure:
             raise LlmGenerationError(
                 f"Falha na chamada ao Ollama em {self._base_url}: {ollama_failure}"
             ) from ollama_failure
 
         elapsed_milliseconds = int((time.perf_counter() - request_started_at) * 1000)
-        return self._build_completion(response.json(), elapsed_milliseconds)
+
+        response_json = response.json()
+
+        total_duration_ns = int(response_json.get("total_duration", 0) or 0)
+
+        load_duration_ns = int(response_json.get("load_duration", 0) or 0)
+
+        eval_count = int(response_json.get("eval_count", 0) or 0)
+
+        _registry.update(
+            self._model,
+            tokens_generated=eval_count,
+            total_duration_seconds=(total_duration_ns / 1_000_000_000),
+            load_duration_seconds=(load_duration_ns / 1_000_000_000),
+        )
+
+        return self._build_completion(
+            response_json,
+            elapsed_milliseconds,
+        )
 
     def _build_completion(
         self,

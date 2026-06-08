@@ -91,11 +91,12 @@ async def upload_document(
         user_agent=request.headers.get("user-agent"),
     )
 
+    primary = ingestion_result.primary_result
     return DocumentUploadResponse(
-        document=DocumentResponse.model_validate(ingestion_result.document),
-        chunks_created=ingestion_result.chunks_created,
-        embedding_provider=ingestion_result.embedding_provider,
-        was_already_ingested=ingestion_result.was_already_ingested,
+        document=DocumentResponse.model_validate(primary.document),
+        chunks_created=primary.chunks_created,
+        embedding_provider=primary.embedding_provider,
+        was_already_ingested=primary.was_already_ingested,
     )
 
 

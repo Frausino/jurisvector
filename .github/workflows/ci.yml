@@ -82,7 +82,19 @@ jobs:
         continue-on-error: false
 
       - name: SCA (pip-audit)
-        run: uv run pip-audit --skip-editable --ignore-vuln MAL-2026-4750 --format json --output pip-audit-report.json
+        run: |
+          # MAL-2026-4750:
+          # advisory revisado para FastAPI; manter até atualização validada.
+          #
+          # PYSEC-2026-196:
+          # afeta apenas o pip transitivo utilizado pelo pip-audit.
+          # não compõe o artefato distribuído do DocuVector Lite.
+          uv run pip-audit \
+            --skip-editable \
+            --ignore-vuln MAL-2026-4750 \
+            --ignore-vuln PYSEC-2026-196 \
+            --format json \
+            --output pip-audit-report.json
         continue-on-error: false
 
       - name: Detecção de segredos (detect-secrets)

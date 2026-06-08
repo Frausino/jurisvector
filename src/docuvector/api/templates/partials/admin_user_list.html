@@ -1,0 +1,63 @@
+{% if error %}
+<div class="mb-3 px-4 py-2 rounded bg-red-50 border border-red-200 text-red-700 text-sm">
+  {{ error }}
+</div>
+{% endif %}
+
+<div class="bg-white rounded-lg border border-slate-200 overflow-hidden">
+  {% if users %}
+  <table class="w-full text-sm">
+    <thead class="bg-slate-50 text-slate-500 text-left text-xs">
+      <tr>
+        <th class="px-4 py-3 font-medium">Email</th>
+        <th class="px-4 py-3 font-medium">Papel</th>
+        <th class="px-4 py-3 font-medium text-right">Ações</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-slate-100">
+      {% for u in users %}
+      <tr class="hover:bg-slate-50">
+        <td class="px-4 py-3 text-slate-800">
+          {{ u.email }}
+          {% if u.id == admin_id %}
+          <span class="ml-1 text-[10px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-600">você</span>
+          {% endif %}
+        </td>
+        <td class="px-4 py-3">
+          <!-- Trocar role inline via select + HTMX -->
+          {% if u.id != admin_id %}
+          <form hx-post="/app/admin/users/{{ u.id }}/role"
+                hx-target="#user-list"
+                hx-swap="innerHTML"
+                hx-trigger="change from:select">
+            <select name="role"
+                    class="text-xs border border-slate-200 rounded px-2 py-1
+                           {% if u.role.value == 'admin' %}text-amber-700 bg-amber-50{% else %}text-slate-600{% endif %}">
+              {% for role in roles %}
+              <option value="{{ role }}" {% if u.role.value == role %}selected{% endif %}>{{ role }}</option>
+              {% endfor %}
+            </select>
+          </form>
+          {% else %}
+          <span class="text-xs px-2 py-1 rounded bg-amber-50 text-amber-700">{{ u.role.value }}</span>
+          {% endif %}
+        </td>
+        <td class="px-4 py-3 text-right">
+          {% if u.id != admin_id %}
+          <button hx-post="/app/admin/users/{{ u.id }}/delete"
+                  hx-target="#user-list"
+                  hx-swap="innerHTML"
+                  hx-confirm="Excluir {{ u.email }}? Esta ação não pode ser desfeita."
+                  class="text-xs text-red-600 hover:text-red-800 font-medium transition">
+            Excluir
+          </button>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="px-4 py-8 text-center text-slate-400 text-sm">Nenhum usuário encontrado.</div>
+  {% endif %}
+</div>

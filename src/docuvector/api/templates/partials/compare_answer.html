@@ -1,0 +1,71 @@
+<!-- Comparação A/B de respostas entre coleções -->
+<div class="mt-4 space-y-2">
+  <div class="flex items-center gap-2 mb-3">
+    <span class="text-xs font-semibold text-slate-700">Comparação A/B</span>
+    <span class="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">{{ query }}</span>
+  </div>
+
+  <div class="grid grid-cols-2 gap-3">
+
+    {% for side, collection, answer, error in [
+      ('A', collection_a, answer_a, error_a),
+      ('B', collection_b, answer_b, error_b),
+    ] %}
+    <div class="rounded-xl border overflow-hidden
+                {% if side == 'A' %}border-blue-200 bg-blue-50{% else %}border-juris-200 bg-juris-50{% endif %}">
+
+      <!-- Header -->
+      <div class="px-3 py-2 border-b
+                  {% if side == 'A' %}border-blue-200 bg-blue-100{% else %}border-juris-200 bg-juris-100{% endif %}">
+        <div class="flex items-center gap-2">
+          <span class="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold text-white
+                       {% if side == 'A' %}bg-blue-500{% else %}bg-juris-600{% endif %}">{{ side }}</span>
+          <span class="text-xs font-semibold
+                       {% if side == 'A' %}text-blue-800{% else %}text-juris-800{% endif %}">
+            {{ collection }}
+          </span>
+          {% if answer %}
+          <span class="ml-auto text-[9px] text-slate-500">{{ answer.latency_ms }} ms · {{ answer.tokens_used }} tok</span>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Conteúdo -->
+      <div class="p-3">
+        {% if error %}
+        <p class="text-xs text-red-600">{{ error }}</p>
+
+        {% elif answer %}
+        <!-- Resposta -->
+        <p class="text-xs text-slate-800 leading-relaxed mb-2 line-clamp-6 whitespace-pre-wrap">
+          {{ answer.text }}
+        </p>
+
+        <!-- Fontes -->
+        {% if answer.sources %}
+        <div class="space-y-1">
+          <p class="text-[9px] font-semibold text-slate-500 uppercase tracking-wide">Fontes</p>
+          {% for source in answer.sources %}
+          <div class="flex items-center gap-1.5 text-[10px] text-slate-600">
+            <div class="w-1.5 h-1.5 rounded-full flex-shrink-0
+                        {% if source.similarity >= 0.85 %}bg-emerald-500
+                        {% elif source.similarity >= 0.70 %}bg-amber-500
+                        {% else %}bg-slate-400{% endif %}"></div>
+            <span class="truncate font-medium">{{ source.document_filename }}</span>
+            <span class="ml-auto flex-shrink-0 text-slate-400">{{ "%.2f"|format(source.similarity) }}</span>
+          </div>
+          {% endfor %}
+        </div>
+        {% endif %}
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+
+  </div>
+
+  <!-- Legenda -->
+  <p class="text-[9px] text-slate-400 text-center">
+    Mesma query · Mesmo LLM · Vetores diferentes ({{ collection_a }} vs {{ collection_b }})
+  </p>
+</div>

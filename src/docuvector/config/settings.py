@@ -57,6 +57,38 @@ class Settings(BaseSettings):
     # =============================================================
     # ChromaDB
     # =============================================================
+
+    # =============================================================
+    # Nomes de coleção Chroma (um por espaço vetorial).
+    # Configuráveis via env para múltiplos ambientes sem conflito.
+    # =============================================================
+    chroma_collection_original: str = Field(
+        default="docuvector",
+        alias="CHROMA_COLLECTION_ORIGINAL",
+    )
+    chroma_collection_int8: str = Field(
+        default="docuvector_int8",
+        alias="CHROMA_COLLECTION_INT8",
+    )
+    chroma_collection_binary: str = Field(
+        default="docuvector_binary",
+        alias="CHROMA_COLLECTION_BINARY",
+    )
+    chroma_collection_pca: str = Field(
+        default="docuvector_pca",
+        alias="CHROMA_COLLECTION_PCA",
+    )
+    chroma_collection_rp: str = Field(
+        default="docuvector_rp",
+        alias="CHROMA_COLLECTION_RP",
+    )
+    chroma_pca_target_dim: int = Field(
+        default=192,
+        ge=2,
+        alias="CHROMA_PCA_TARGET_DIM",
+        description="Dimensão alvo para PCA e RandomProjection.",
+    )
+
     chroma_persist_dir: Path = Field(
         default=Path("./data/chroma"),
         alias="CHROMA_PERSIST_DIR",

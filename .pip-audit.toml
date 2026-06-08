@@ -38,3 +38,4 @@
 ## ---------------------------------------------------------------
 [ignore-vuln]
 MAL-2026-4750 = "FastAPI 0.136.3: advisory sem detalhe público; risco residual aceito; mitigações compensatórias documentadas no threat model."
+PYSEC-2026-196 = "Justificativa documentada; revisar periodicamente e remover quando houver correção validada."

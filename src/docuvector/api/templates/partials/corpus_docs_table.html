@@ -1,0 +1,138 @@
+{% if documents %}
+<div class="overflow-x-auto">
+  <table class="w-full text-sm">
+    <thead class="bg-slate-50 text-slate-500 text-xs text-left border-b border-slate-100">
+      <tr>
+        <th class="px-5 py-2.5 font-semibold">Documento</th>
+        <th class="px-4 py-2.5 font-semibold text-right">Dims orig.</th>
+        <th class="px-4 py-2.5 font-semibold">Compressor</th>
+        <th class="px-4 py-2.5 font-semibold text-right">Dims comp.</th>
+        <th class="px-4 py-2.5 font-semibold text-right">Ret. semântica</th>
+        <th class="px-4 py-2.5 font-semibold text-right">Economia</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-slate-50">
+      {% for doc in documents %}
+      {% set has_data = doc.original_dimension is not none %}
+      {% set dims_ok = doc.compressed_dimension and doc.compressed_dimension >= 8 %}
+      {% set auto_benchmark = has_data %}  {# compressão aplicada pelo benchmark automático #}
+      <tr class="hover:bg-slate-50/60 transition-colors">
+
+        <!-- Nome do documento -->
+        <td class="px-5 py-3">
+          <p class="font-semibold text-slate-800 truncate max-w-[200px]" title="{{ doc.filename }}">
+            {{ doc.filename }}
+          </p>
+          <p class="text-[10px] text-slate-400 mt-0.5">{{ (doc.size_bytes / 1024) | round(1) }} KB</p>
+        </td>
+
+        <!-- Dims originais -->
+        <td class="px-4 py-3 text-right text-slate-600 font-mono text-xs">
+          {% if doc.original_dimension %}
+          {{ doc.original_dimension }}
+          {% else %}
+          <span class="text-slate-300">—</span>
+          {% endif %}
+        </td>
+
+        <!-- Compressor com nota de origem -->
+        <td class="px-4 py-3">
+          {% if doc.compression_method %}
+          <div class="flex items-center gap-1.5">
+            <span class="text-[10px] px-2 py-0.5 rounded-full font-semibold
+                         {% if doc.compression_method.value == 'int8' %}bg-green-100 text-green-700
+                         {% elif doc.compression_method.value == 'binary' %}bg-purple-100 text-purple-700
+                         {% elif doc.compression_method.value == 'pca' %}bg-slate-100 text-slate-600
+                         {% elif doc.compression_method.value == 'random_projection' %}bg-amber-100 text-amber-700
+                         {% else %}bg-slate-100 text-slate-500{% endif %}">
+              {{ doc.compression_method.value }}
+            </span>
+            {% if auto_benchmark %}
+            <span class="text-[9px] text-slate-400" title="Aplicado automaticamente pelo benchmark de compressão">
+              auto
+            </span>
+            {% endif %}
+          </div>
+          {% else %}
+          <span class="text-[10px] text-slate-300">sem benchmark</span>
+          {% endif %}
+        </td>
+
+        <!-- Dims comprimidas com alerta se inútil -->
+        <td class="px-4 py-3 text-right font-mono text-xs">
+          {% if doc.compressed_dimension %}
+          <div class="flex items-center justify-end gap-1">
+            {% if not dims_ok %}
+            <span title="Corpus muito pequeno para PCA — adicione mais documentos"
+                  class="text-[9px] text-amber-500">⚠</span>
+            {% endif %}
+            <span class="{% if not dims_ok %}text-amber-600 font-semibold{% else %}text-slate-600{% endif %}">
+              {{ doc.compressed_dimension }}
+            </span>
+          </div>
+          {% else %}
+          <span class="text-slate-300">—</span>
+          {% endif %}
+        </td>
+
+        <!-- Retenção semântica -->
+        <td class="px-4 py-3 text-right">
+          {% if doc.semantic_retention is not none %}
+          <span class="text-xs font-semibold
+                       {% if doc.semantic_retention >= 0.95 %}text-emerald-600
+                       {% elif doc.semantic_retention >= 0.85 %}text-amber-600
+                       {% else %}text-red-600{% endif %}">
+            {{ (doc.semantic_retention * 100) | round(1) }}%
+          </span>
+          {% else %}
+          <span class="text-slate-300">—</span>
+          {% endif %}
+        </td>
+
+        <!-- Economia de bytes -->
+        <td class="px-4 py-3 text-right">
+          {% if doc.original_dimension and doc.compressed_dimension %}
+          {% if not dims_ok %}
+          <span class="text-[10px] text-amber-500" title="Compressão inútil — corpus pequeno demais para PCA">
+            inválida
+          </span>
+          {% else %}
+          {% set bytes_orig = doc.original_dimension * 4 %}
+          {% if doc.compression_method and doc.compression_method.value == 'int8' %}
+            {% set bytes_comp = doc.compressed_dimension %}
+          {% elif doc.compression_method and doc.compression_method.value == 'binary' %}
+            {% set bytes_comp = (doc.compressed_dimension / 8)|round(2) %}
+          {% else %}
+            {% set bytes_comp = doc.compressed_dimension * 4 %}
+          {% endif %}
+          {% set saving = ((bytes_orig - bytes_comp) / bytes_orig * 100) | round(1) %}
+          <span class="text-xs font-semibold text-emerald-600">-{{ saving }}%</span>
+          {% endif %}
+          {% else %}
+          <span class="text-slate-300">—</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<!-- Nota explicativa sobre compressão automática -->
+{% set has_auto = documents | selectattr('compression_method') | list | length > 0 %}
+{% if has_auto %}
+<div class="px-5 py-2.5 border-t border-slate-100 bg-slate-50/50">
+  <p class="text-[10px] text-slate-400">
+    <span class="font-semibold">auto</span> = aplicado automaticamente pelo benchmark de compressão (§).
+    Para escolher o compressor manualmente, use o menu de cada documento na aba Consulta.
+    <span class="text-amber-500 font-medium">⚠ dims &lt; 8 indica corpus insuficiente para PCA.</span>
+  </p>
+</div>
+{% endif %}
+
+{% else %}
+<div class="px-5 py-8 text-center">
+  <p class="text-xs text-slate-400 font-medium">Nenhum documento indexado.</p>
+  <p class="text-[10px] text-slate-300 mt-1">Envie documentos na aba Consulta.</p>
+</div>
+{% endif %}
