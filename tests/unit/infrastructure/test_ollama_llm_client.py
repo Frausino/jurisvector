@@ -21,7 +21,7 @@ def _make_client_with_mock_transport(
     """
     return OllamaLlmClient(
         base_url="http://localhost:11434",
-        model="qwen2.5:7b",
+        model="qwen2.5:3b",
         timeout_seconds=5.0,
     )
 
@@ -32,7 +32,7 @@ def test_complete_parses_message_content_and_tokens(
 ) -> None:
     """Resposta válida do Ollama → LlmCompletion com texto e tokens."""
     fake_payload = {
-        "model": "qwen2.5:7b",
+        "model": "qwen2.5:3b",
         "message": {"role": "assistant", "content": "Resposta gerada [1]."},
         "prompt_eval_count": 120,
         "eval_count": 35,
@@ -59,7 +59,7 @@ def test_complete_parses_message_content_and_tokens(
     assert completion.text == "Resposta gerada [1]."
     assert completion.tokens_used == 155
     assert completion.cost_usd == 0.0
-    assert completion.model == "qwen2.5:7b"
+    assert completion.model == "qwen2.5:3b"
     assert completion.latency_ms >= 0
 
 
@@ -99,7 +99,7 @@ def test_base_url_trailing_slash_is_normalized(
         return httpx.Response(
             status_code=200,
             json={
-                "model": "qwen2.5:7b",
+                "model": "qwen2.5:3b",
                 "message": {
                     "role": "assistant",
                     "content": "ok",
@@ -117,7 +117,7 @@ def test_base_url_trailing_slash_is_normalized(
 
     client = OllamaLlmClient(
         base_url="http://localhost:11434/",
-        model="qwen2.5:7b",
+        model="qwen2.5:3b",
     )
 
     client.complete(

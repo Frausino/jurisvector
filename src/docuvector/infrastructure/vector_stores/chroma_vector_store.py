@@ -14,6 +14,7 @@ embedder juntos, garantindo coerência.
 
 from __future__ import annotations
 
+import contextlib
 from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
@@ -53,6 +54,17 @@ class ChromaVectorStore:
             name=collection_name,
             metadata={"hnsw:space": "cosine"},
         )
+        # Dimensao registrada na colecao existente (None se colecao vazia)
+        self._registered_dimension: int | None = self._read_collection_dimension()
+
+    def _read_collection_dimension(self) -> int | None:
+        """Retorna a dimensao dos vetores ja armazenados na colecao, ou None se vazia."""
+        with contextlib.suppress(Exception):
+            result = self._collection.peek(limit=1)
+            embeddings = result.get("embeddings")
+            if embeddings and len(embeddings) > 0 and embeddings[0]:
+                return len(embeddings[0])
+        return None
 
     # -------------------------------------------------------------
     # Operações
@@ -78,6 +90,25 @@ class ChromaVectorStore:
                 "document_filename": chunk.document_filename,
             }
             metadatas.append(metadata)
+
+        # Valida dimensao antes de chamar o Chroma.
+        # O Chroma trava a dimensao na primeira insercao e rejeita
+        # qualquer vetor com dimensao diferente com erro confuso.
+        # Esta validacao antecipa o erro com mensagem clara.
+        if embeddings:
+            incoming_dim = len(embeddings[0])
+            if self._registered_dimension is not None:
+                if incoming_dim != self._registered_dimension:
+                    raise VectorStoreError(
+                        f"Conflito de dimensoes na colecao '{self._collection_name}': "
+                        f"a colecao foi criada com {self._registered_dimension} dimensoes "
+                        f"(provavelmente com OpenAI) mas o embedding atual tem "
+                        f"{incoming_dim} dimensoes (provavelmente E5-small local). "
+                        f"Solucao: apague a pasta data/chroma e reinicie o servidor."
+                    )
+            else:
+                # Registra a dimensao da primeira insercao
+                self._registered_dimension = incoming_dim
 
         try:
             self._collection.add(

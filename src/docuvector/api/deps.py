@@ -26,7 +26,6 @@ from docuvector.application.document_crud_use_case import DocumentCrudUseCase
 from docuvector.application.embedding_benchmark_use_case import (
     EmbeddingBenchmarkUseCase,
 )
-from docuvector.application.ingestion_use_case import IngestionUseCase
 from docuvector.application.metrics_use_case import MetricsUseCase
 from docuvector.application.multi_collection_ingestion_use_case import (
     MultiCollectionIngestionUseCase,
@@ -34,14 +33,17 @@ from docuvector.application.multi_collection_ingestion_use_case import (
 from docuvector.application.register_user_use_case import RegisterUserUseCase
 from docuvector.application.retrieval_use_case import RetrievalUseCase
 from docuvector.config.settings import Settings, get_settings
-from docuvector.domain.enums import CompressionMethod, UserRole
+from docuvector.domain.enums import (
+    CompressionMethod,
+    EmbeddingProviderName,
+    UserRole,
+)
 from docuvector.domain.exceptions import AuthenticationError
 from docuvector.domain.interfaces import VectorStore
 from docuvector.domain.interfaces.password_policy_validator import (
     PasswordPolicyValidator,
 )
 from docuvector.domain.interfaces.token_service import TokenPayload
-from docuvector.infrastructure.chunking.recursive_splitter import RecursiveSplitter
 from docuvector.infrastructure.compression.binary_compressor import BinaryCompressor
 from docuvector.infrastructure.compression.int8_compressor import Int8Compressor
 from docuvector.infrastructure.compression.random_projection_compressor import (
@@ -280,6 +282,8 @@ def provide_ingestion_use_case(
     vector_store: VectorStoreDependency,
 ) -> MultiCollectionIngestionUseCase:
     """Use case de ingestão que grava na coleção original e nas 4 comprimidas."""
+    from docuvector.application.ingestion_use_case import IngestionUseCase
+    from docuvector.infrastructure.chunking.recursive_splitter import RecursiveSplitter
 
     settings = get_settings()
     primary = IngestionUseCase(
@@ -336,6 +340,24 @@ AnswerUseCaseDependency = Annotated[
     AnswerUseCase,
     Depends(provide_answer_use_case),
 ]
+
+
+def build_answer_use_case_for_store(store: VectorStore) -> AnswerUseCase:
+    """Constrói AnswerUseCase com o VectorStore escolhido por request.
+
+    Permite ao router selecionar a coleção (original, int8, binary, pca, rp)
+    e o provider (ST ou OpenAI) sem alterar os singletons globais.
+    """
+    settings = get_settings()
+    retrieval = RetrievalUseCase(
+        vector_store=store,
+        default_top_k=settings.rag_top_k,
+        default_similarity_threshold=settings.rag_similarity_threshold,
+    )
+    return AnswerUseCase(
+        retrieval_use_case=retrieval,
+        audit_repository=SqlAlchemyAuditRepository(get_session_factory()),
+    )
 
 
 def provide_compression_benchmark_use_case(
@@ -400,77 +422,205 @@ CompareRetrievalUseCaseDependency = Annotated[
 ]
 
 
-def resolve_vector_store_by_collection(collection: str) -> VectorStore:
-    """Resolve o VectorStore pelo nome da coleção.
+# =============================================================
+# Stores OpenAI — coleções separadas (1536 dims)
+# Nunca misturar com stores ST (384 dims): dimensões incompatíveis.
+# =============================================================
+@lru_cache(maxsize=1)
+def _get_oai_original_store() -> ChromaVectorStore:
+    settings = get_settings()
+    return ChromaVectorStore(
+        persist_directory=str(settings.chroma_persist_dir),
+        collection_name=settings.chroma_collection_openai_original,
+    )
 
-    Padrão Strategy: o router escolhe qual espaço vetorial usar
-    por request, sem alterar os singletons globais.
-    Fallback para a coleção original se o nome for desconhecido.
+
+@lru_cache(maxsize=1)
+def _get_oai_int8_store() -> VectorStore:
+    settings = get_settings()
+    inner = ChromaVectorStore(
+        persist_directory=str(settings.chroma_persist_dir),
+        collection_name=settings.chroma_collection_openai_int8,
+    )
+    return CompressedVectorStore(inner_store=inner, compressor=Int8Compressor())
+
+
+@lru_cache(maxsize=1)
+def _get_oai_binary_store() -> VectorStore:
+    settings = get_settings()
+    inner = ChromaVectorStore(
+        persist_directory=str(settings.chroma_persist_dir),
+        collection_name=settings.chroma_collection_openai_binary,
+    )
+    return CompressedVectorStore(inner_store=inner, compressor=BinaryCompressor())
+
+
+@lru_cache(maxsize=1)
+def _get_oai_pca_store() -> VectorStore:
+    settings = get_settings()
+    inner = ChromaVectorStore(
+        persist_directory=str(settings.chroma_persist_dir),
+        collection_name=settings.chroma_collection_openai_pca,
+    )
+    return CorpusPcaStore(
+        inner_store=inner,
+        target_dim=settings.chroma_pca_target_dim,
+    )
+
+
+@lru_cache(maxsize=1)
+def _get_oai_rp_store() -> VectorStore:
+    settings = get_settings()
+    inner = ChromaVectorStore(
+        persist_directory=str(settings.chroma_persist_dir),
+        collection_name=settings.chroma_collection_openai_rp,
+    )
+    return CompressedVectorStore(
+        inner_store=inner,
+        compressor=RandomProjectionCompressor(target_dim=settings.chroma_pca_target_dim),
+    )
+
+
+def get_vector_store_for_provider(provider_name: str) -> ChromaVectorStore:
+    """Retorna o store original correto para o provider de embedding.
+
+    Garante que vetores ST (384 dims) e OpenAI (1536 dims) nunca
+    compartilhem a mesma coleção ChromaDB.
+    """
+    if provider_name == EmbeddingProviderName.OPENAI.value:
+        return _get_oai_original_store()
+    return get_vector_store()
+
+
+def resolve_vector_store_by_collection(
+    collection: str,
+    embedding_provider: str = EmbeddingProviderName.SENTENCE_TRANSFORMERS.value,
+) -> VectorStore:
+    """Resolve o VectorStore pelo nome da coleção E pelo provider de embedding.
+
+    O provider determina qual conjunto de coleções usar:
+    - sentence_transformers: docuvector, docuvector_int8, ...
+    - openai: docuvector_oai, docuvector_oai_int8, ...
+
+    Isso evita o erro 'Embedding dimension 384 does not match 1536'.
     """
     settings = get_settings()
-    collection_map: dict[str, VectorStore] = {
-        settings.chroma_collection_original: get_vector_store(),
-        settings.chroma_collection_int8: _get_int8_store(),
-        settings.chroma_collection_binary: _get_binary_store(),
-        settings.chroma_collection_rp: _get_rp_store(),
-        settings.chroma_collection_pca: _get_pca_store(),
+    is_openai = embedding_provider == EmbeddingProviderName.OPENAI.value
+
+    collection_map: dict[str, VectorStore] = (
+        {
+            settings.chroma_collection_openai_original: _get_oai_original_store(),
+            settings.chroma_collection_openai_int8: _get_oai_int8_store(),
+            settings.chroma_collection_openai_binary: _get_oai_binary_store(),
+            settings.chroma_collection_openai_pca: _get_oai_pca_store(),
+            settings.chroma_collection_openai_rp: _get_oai_rp_store(),
+            # aliases curtos para uso no seletor do chat
+            "original": _get_oai_original_store(),
+            "int8": _get_oai_int8_store(),
+            "binary": _get_oai_binary_store(),
+            "pca": _get_oai_pca_store(),
+            "random_projection": _get_oai_rp_store(),
+        }
+        if is_openai
+        else {
+            settings.chroma_collection_original: get_vector_store(),
+            settings.chroma_collection_int8: _get_int8_store(),
+            settings.chroma_collection_binary: _get_binary_store(),
+            settings.chroma_collection_pca: _get_pca_store(),
+            settings.chroma_collection_rp: _get_rp_store(),
+            "original": get_vector_store(),
+            "int8": _get_int8_store(),
+            "binary": _get_binary_store(),
+            "pca": _get_pca_store(),
+            "random_projection": _get_rp_store(),
+        }
+    )
+    return collection_map.get(collection, get_vector_store_for_provider(embedding_provider))
+
+
+def provide_compress_to_collection_use_case(
+    method_name: str,
+    embedding_provider: str = EmbeddingProviderName.SENTENCE_TRANSFORMERS.value,
+) -> CompressToCollectionUseCase:
+    """Factory de CompressToCollectionUseCase para o método e provider escolhidos.
+
+    O provider determina qual conjunto de coleções usar.
+    ST (384 dims) e OpenAI (1536 dims) têm stores completamente separados.
+    """
+    settings = get_settings()
+    is_openai = embedding_provider == EmbeddingProviderName.OPENAI.value
+
+    st_map: dict[str, tuple[VectorStore, str]] = {
+        CompressionMethod.INT8.value: (_get_int8_store(), settings.chroma_collection_int8),
+        CompressionMethod.BINARY.value: (_get_binary_store(), settings.chroma_collection_binary),
+        CompressionMethod.PCA.value: (_get_pca_store(), settings.chroma_collection_pca),
+        CompressionMethod.RANDOM_PROJECTION.value: (_get_rp_store(), settings.chroma_collection_rp),
     }
-    return collection_map.get(collection, get_vector_store())
-
-
-def build_answer_use_case_for_store(store: VectorStore) -> AnswerUseCase:
-    """Constrói AnswerUseCase com o VectorStore escolhido pelo usuário.
-
-    Usado pelo router para suportar RAG em qualquer coleção
-    (original, int8, binary, rp, pca) sem mudar singletons.
-    """
-    settings = get_settings()
-    retrieval = RetrievalUseCase(
-        vector_store=store,
-        default_top_k=settings.rag_top_k,
-        default_similarity_threshold=settings.rag_similarity_threshold,
-    )
-    return AnswerUseCase(
-        retrieval_use_case=retrieval,
-        audit_repository=SqlAlchemyAuditRepository(get_session_factory()),
-    )
-
-
-def provide_compress_to_collection_use_case(method_name: str) -> CompressToCollectionUseCase:
-    """Factory de CompressToCollectionUseCase para o método escolhido.
-
-    Resolve o store comprimido alvo pelo nome do método.
-    Chamado pelo router com o parâmetro de rota {method}.
-    """
-    settings = get_settings()
-    store_map: dict[str, tuple[VectorStore, str]] = {
+    oai_map: dict[str, tuple[VectorStore, str]] = {
         CompressionMethod.INT8.value: (
-            _get_int8_store(),
-            settings.chroma_collection_int8,
+            _get_oai_int8_store(),
+            settings.chroma_collection_openai_int8,
         ),
         CompressionMethod.BINARY.value: (
-            _get_binary_store(),
-            settings.chroma_collection_binary,
+            _get_oai_binary_store(),
+            settings.chroma_collection_openai_binary,
         ),
-        CompressionMethod.PCA.value: (
-            _get_pca_store(),
-            settings.chroma_collection_pca,
-        ),
+        CompressionMethod.PCA.value: (_get_oai_pca_store(), settings.chroma_collection_openai_pca),
         CompressionMethod.RANDOM_PROJECTION.value: (
-            _get_rp_store(),
-            settings.chroma_collection_rp,
+            _get_oai_rp_store(),
+            settings.chroma_collection_openai_rp,
         ),
     }
+    store_map = oai_map if is_openai else st_map
+    original = _get_oai_original_store() if is_openai else get_vector_store()
+    default_col = (
+        settings.chroma_collection_openai_int8 if is_openai else settings.chroma_collection_int8
+    )
     compressed_store, collection_name = store_map.get(
         method_name,
-        (_get_int8_store(), settings.chroma_collection_int8),
+        (_get_oai_int8_store() if is_openai else _get_int8_store(), default_col),
     )
     return CompressToCollectionUseCase(
-        original_store=get_vector_store(),
+        original_store=original,
         compressed_store=compressed_store,
         target_collection_name=collection_name,
         document_repository=SqlAlchemyDocumentRepository(get_session_factory()()),
         audit_repository=SqlAlchemyAuditRepository(get_session_factory()),
+    )
+
+
+def provide_ingestion_use_case_for_provider(
+    session: SessionDependency,
+    embedding_provider_name: str = EmbeddingProviderName.SENTENCE_TRANSFORMERS.value,
+) -> MultiCollectionIngestionUseCase:
+    """Cria o MultiCollectionIngestionUseCase para o provider de embedding correto.
+
+    Garante que ST (384 dims) usa coleções docuvector_* e
+    OpenAI (1536 dims) usa coleções docuvector_oai_*.
+    Evita o InvalidDimensionException do ChromaDB.
+    """
+    from docuvector.application.ingestion_use_case import IngestionUseCase
+    from docuvector.infrastructure.chunking.recursive_splitter import RecursiveSplitter
+
+    settings = get_settings()
+    is_openai = embedding_provider_name == EmbeddingProviderName.OPENAI.value
+    vector_store = _get_oai_original_store() if is_openai else get_vector_store()
+
+    primary = IngestionUseCase(
+        document_repository=SqlAlchemyDocumentRepository(session),
+        text_splitter=RecursiveSplitter(
+            chunk_size=settings.rag_chunk_size,
+            chunk_overlap=settings.rag_chunk_overlap,
+        ),
+        vector_store=vector_store,
+        audit_repository=SqlAlchemyAuditRepository(get_session_factory()),
+        upload_max_bytes=settings.upload_max_bytes,
+    )
+    return MultiCollectionIngestionUseCase(
+        primary_ingestion=primary,
+        primary_vector_store=vector_store,
+        compressed_stores=[],  # compressão é 100% sob demanda
+        document_repository=SqlAlchemyDocumentRepository(session),
     )
 
 
