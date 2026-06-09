@@ -41,7 +41,7 @@ A regra de dependência é unidirecional: camadas externas dependem das internas
 | Banco relacional  | PostgreSQL                       | 16                            |
 | Vector store      | ChromaDB                         | local persistido              |
 | Embedding local   | sentence-transformers (E5-small) | via HuggingFace               |
-| LLM local         | Ollama (qwen2.5:7b)              | API REST                      |
+| LLM local         | Ollama (qwen2.5:3b)              | API REST                      |
 | LLM remoto        | OpenAI API                       | gpt-4o-mini                   |
 | Frontend          | Jinja2 + HTMX + Tailwind CDN     | SSR                           |
 | Autenticação      | JWT (python-jose) + bcrypt       | cookie HttpOnly               |
@@ -115,7 +115,7 @@ Implementações concretas das interfaces do domínio.
 
 **LLM:**
 - `MockLlmClient` — resposta determinística para testes
-- `OllamaLlmClient` — qwen2.5:7b via API REST local
+- `OllamaLlmClient` — qwen2.5:3b via API REST local
 - `OpenAILlmClient` — gpt-4o-mini com contagem de tokens e custo
 
 **Persistência:**
