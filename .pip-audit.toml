@@ -6,6 +6,37 @@
 ## =============================================================
 
 ## ---------------------------------------------------------------
+## PYSEC-2025-194 (CVE-2025-3000) — torch 2.12.0
+##
+## Status: FALSO POSITIVO (falso positivo de range)
+## Data do flag: 12/06/2026
+## Reportado por: pip-audit local
+##
+## Análise:
+##   - Advisory reporta vulnerabilidade em torch.jit.script no PyTorch
+##     2.6.0. Range OSV registra "last_affected: 2.6.0-NA".
+##   - O sufixo "-NA" não é corretamente interpretado pelo comparador
+##     de versões do pip-audit, fazendo com que a versão 2.12.0 (muito
+##     posterior ao range real) seja erroneamente sinalizada.
+##   - torch 2.12.0 é a versão mais recente disponível no PyPI e está
+##     fora do range real de versões afetadas (≤2.6.0).
+##   - O projeto não importa torch diretamente nem usa torch.jit.script
+##     — é dependência transitiva via sentence-transformers.
+##
+## Risco: MUITO BAIXO
+##   - CVSS 5.3 Medium, vetor local (AV:L), sem exposição remota.
+##   - Aplicação executa apenas em localhost (acadêmico/demo).
+##   - torch.jit.script não é utilizado em nenhum código do projeto.
+##
+## Plano de revisão:
+##   - Reavaliar quando pip-audit ou PyPA advisory-database corrigir
+##     o range para excluir versões > 2.6.0.
+##   - Alternativamente, remover o ignore quando torch > 2.12.0 for
+##     lançado e o advisory for atualizado.
+##
+## Aprovado por: Davi Rosa F.
+## ---------------------------------------------------------------
+## ---------------------------------------------------------------
 ## MAL-2026-4750 — fastapi 0.136.3
 ##
 ## Status: SOB INVESTIGAÇÃO
@@ -37,5 +68,6 @@
 ## Aprovado por: Davi Rosa F.
 ## ---------------------------------------------------------------
 [ignore-vuln]
+CVE-2025-3000 = "torch 2.12.0: falso positivo de range; advisory cobre apenas ≤2.6.0; pip-audit não interpreta sufixo '-NA'."
 MAL-2026-4750 = "FastAPI 0.136.3: advisory sem detalhe público; risco residual aceito; mitigações compensatórias documentadas no threat model."
 PYSEC-2026-196 = "Justificativa documentada; revisar periodicamente e remover quando houver correção validada."
