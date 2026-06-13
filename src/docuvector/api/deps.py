@@ -26,6 +26,7 @@ from docuvector.application.document_crud_use_case import DocumentCrudUseCase
 from docuvector.application.embedding_benchmark_use_case import (
     EmbeddingBenchmarkUseCase,
 )
+from docuvector.application.ingestion_use_case import IngestionUseCase
 from docuvector.application.metrics_use_case import MetricsUseCase
 from docuvector.application.multi_collection_ingestion_use_case import (
     MultiCollectionIngestionUseCase,
@@ -44,6 +45,9 @@ from docuvector.domain.interfaces.password_policy_validator import (
     PasswordPolicyValidator,
 )
 from docuvector.domain.interfaces.token_service import TokenPayload
+from docuvector.infrastructure.chunking.recursive_splitter import (
+    RecursiveSplitter,
+)
 from docuvector.infrastructure.compression.binary_compressor import BinaryCompressor
 from docuvector.infrastructure.compression.int8_compressor import Int8Compressor
 from docuvector.infrastructure.compression.random_projection_compressor import (
@@ -282,8 +286,6 @@ def provide_ingestion_use_case(
     vector_store: VectorStoreDependency,
 ) -> MultiCollectionIngestionUseCase:
     """Use case de ingestão que grava na coleção original e nas 4 comprimidas."""
-    from docuvector.application.ingestion_use_case import IngestionUseCase
-    from docuvector.infrastructure.chunking.recursive_splitter import RecursiveSplitter
 
     settings = get_settings()
     primary = IngestionUseCase(
@@ -599,8 +601,6 @@ def provide_ingestion_use_case_for_provider(
     OpenAI (1536 dims) usa coleções docuvector_oai_*.
     Evita o InvalidDimensionException do ChromaDB.
     """
-    from docuvector.application.ingestion_use_case import IngestionUseCase
-    from docuvector.infrastructure.chunking.recursive_splitter import RecursiveSplitter
 
     settings = get_settings()
     is_openai = embedding_provider_name == EmbeddingProviderName.OPENAI.value
