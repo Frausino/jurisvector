@@ -62,6 +62,7 @@ class Settings(BaseSettings):
     # Nomes de coleção Chroma (um por espaço vetorial).
     # Configuráveis via env para múltiplos ambientes sem conflito.
     # =============================================================
+    # ── Coleções sentence-transformers (E5-small, 384 dims) ──────────
     chroma_collection_original: str = Field(
         default="docuvector",
         alias="CHROMA_COLLECTION_ORIGINAL",
@@ -81,6 +82,29 @@ class Settings(BaseSettings):
     chroma_collection_rp: str = Field(
         default="docuvector_rp",
         alias="CHROMA_COLLECTION_RP",
+    )
+
+    # ── Coleções OpenAI (1536 dims) ──────────────────────────────────
+    # Totalmente separadas: nunca compartilham vetores com as coleções ST
+    chroma_collection_openai_original: str = Field(
+        default="docuvector_oai",
+        alias="CHROMA_COLLECTION_OPENAI_ORIGINAL",
+    )
+    chroma_collection_openai_int8: str = Field(
+        default="docuvector_oai_int8",
+        alias="CHROMA_COLLECTION_OPENAI_INT8",
+    )
+    chroma_collection_openai_binary: str = Field(
+        default="docuvector_oai_binary",
+        alias="CHROMA_COLLECTION_OPENAI_BINARY",
+    )
+    chroma_collection_openai_pca: str = Field(
+        default="docuvector_oai_pca",
+        alias="CHROMA_COLLECTION_OPENAI_PCA",
+    )
+    chroma_collection_openai_rp: str = Field(
+        default="docuvector_oai_rp",
+        alias="CHROMA_COLLECTION_OPENAI_RP",
     )
     chroma_pca_target_dim: int = Field(
         default=192,
@@ -182,10 +206,10 @@ class Settings(BaseSettings):
         alias="OLLAMA_BASE_URL",
     )
     ollama_model: str = Field(
-        default="qwen2.5:7b",
+        default="qwen2.5:3b",
         alias="OLLAMA_MODEL",
         description=(
-            "Modelo Ollama (ex.: 'qwen2.5:7b', 'llama3.2:3b'). "
+            "Modelo Ollama (ex.: 'qwen2.5:3b', 'llama3.2:3b'). "
             "Precisa ter sido baixado via `ollama pull <modelo>`."
         ),
     )

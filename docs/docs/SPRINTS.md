@@ -59,7 +59,7 @@
 - `RetrievalUseCase` com similarity_threshold
 - `AnswerUseCase`: retrieval + geração LLM + audit
 - `MockLlmClient` para testes sem rede
-- `OllamaLlmClient` (qwen2.5:7b)
+- `OllamaLlmClient` (qwen2.5:3b)
 - Migration `0003`
 
 ---

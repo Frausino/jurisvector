@@ -112,7 +112,7 @@ def _set_test_environment() -> None:
     # `ollama` ou `openai`.
     os.environ.setdefault("LLM_DEFAULT_PROVIDER", "mock")
     os.environ.setdefault("OLLAMA_BASE_URL", "http://localhost:11434")
-    os.environ.setdefault("OLLAMA_MODEL", "qwen2.5:7b")
+    os.environ.setdefault("OLLAMA_MODEL", "qwen2.5:3b")
     os.environ.setdefault("OLLAMA_TIMEOUT_SECONDS", "60")
     os.environ.setdefault("RAG_CHUNK_SIZE", "1000")
     os.environ.setdefault("RAG_CHUNK_OVERLAP", "200")

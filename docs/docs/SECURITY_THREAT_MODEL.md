@@ -215,7 +215,7 @@ Trust boundaries são fronteiras onde o nível de confiança muda. Cada cruzamen
 | PW.8 (Testar código executável quanto a vulnerabilidades)         | Testes automatizados de autorização (BOLA), de validação de input                                       |
 | PW.9 (Configurar software com configurações de segurança padrão)  | `.env.example` documentado; valores seguros como default (CORS restrito, JWT_SECRET com tamanho mínimo) |
 | RV.1 (Identificar e confirmar vulnerabilidades em base contínua)  | pip-audit no CI a cada push                                                                             |
-| RV.2 (Avaliar, priorizar e remediar vulnerabilidades)             | Política: CVE CRITICAL bloqueia merge; HIGH gera issue                                                  |
+| RV.2 (Avaliar, priorizar e remediar vulnerabilidades) | Política: CVE CRITICAL bloqueia merge, exceto quando simultaneamente: (1) não existir versão corrigida disponível; (2) a vulnerabilidade afetar funcionalidade não utilizada pelo sistema; (3) existir análise formal de exposição; (4) existir registro de exceção aprovado neste Threat Model. Nessas situações a vulnerabilidade deve ser registrada como risco residual temporário e permanecer sob monitoramento contínuo. |
 
 ---
 
@@ -236,6 +236,49 @@ Riscos conhecidos não mitigados na v1.0, conscientemente aceitos com justificat
 | RR-09 | Sem hardening do kernel do container além do default         | CIS Docker Benchmark cobre o essencial; hardening profundo (seccomp profile customizado, AppArmor) fora do escopo                |
 
 ---
+
+## 9.1 Exceções temporárias de vulnerabilidades conhecidas
+
+Determinadas vulnerabilidades podem permanecer temporariamente aceitas quando todos os critérios abaixo forem satisfeitos:
+
+1. Não existir versão corrigida oficialmente disponível.
+2. A vulnerabilidade afetar dependência transitiva.
+3. A funcionalidade vulnerável não for utilizada pelo sistema.
+4. Existirem controles compensatórios documentados.
+5. Houver monitoramento contínuo por SCA (Software Composition Analysis).
+
+### EX-001 — CVE-2025-3000 (PyTorch)
+
+| Campo               | Valor                                        |
+| ------------------- | -------------------------------------------- |
+| Identificador       | CVE-2025-3000                                |
+| Pacote afetado      | torch 2.12.0                                 |
+| Dependência raiz    | sentence-transformers 5.5.1                  |
+| Função vulnerável   | torch.jit.script                             |
+| Uso no sistema      | Não utilizado                                |
+| Exposição           | Baixa                                        |
+| Correção disponível | Não informada pelo pip-audit                 |
+| Status              | Aceita temporariamente                       |
+| Revisão obrigatória | Próximo ciclo de atualização de dependências |
+
+#### Controles compensatórios
+
+* Não utilização de TorchScript.
+* Não utilização de JIT compilation.
+* Não carregamento de modelos arbitrários enviados por usuários.
+* Uso exclusivo para inferência de embeddings.
+* Modelos carregados apenas de fontes confiáveis.
+* Monitoramento contínuo via pip-audit.
+* Revisão obrigatória antes de cada release acadêmica.
+
+#### Justificativa
+
+A vulnerabilidade reportada afeta a função `torch.jit.script`, utilizada em cenários de TorchScript/JIT. O DocuVector Lite utiliza PyTorch exclusivamente para inferência de embeddings através de Sentence Transformers, não empregando compilação dinâmica, geração de TorchScript ou execução de modelos fornecidos por terceiros.
+
+Até a data desta revisão, o banco de vulnerabilidades consumido pelo pip-audit não informa versão corrigida disponível para o ecossistema atualmente compatível com Sentence Transformers.
+
+A exceção será removida imediatamente quando uma versão corrigida compatível for disponibilizada pelo upstream.
+
 
 ## 10. Estratégia de verificação dos controles
 
@@ -297,3 +340,5 @@ Próxima revisão obrigatória: Sprint 8, antes da apresentação.
 | 26/05/2026 | PYSEC-2025-217, CVE-2026-1839             | transformers | 4.57.6            | 5.0.0            | Média                                    | Bump para major estável (linha 4.x não recebeu patch; upstream pulou direto para 5.0)                                                                                                                                                                                                                                                             |
 | 26/05/2026 | CVE-2025-71176                            | pytest       | 8.4.2             | 9.0.3            | Baixa (dev-only)                         | Bump                                                                                                                                                                                                                                                                                                                                              |
 | 26/05/2026 | MAL-2026-4750                             | fastapi      | 0.136.3           | n/a              | Indeterminada                            | **Risco residual aceito**: advisory sem detalhe público disponível em OSV/GHSA/NVD; provável falso positivo de classificador automático. Mitigações compensatórias: (1) FastAPI isolado em `[project.optional-dependencies] api`; (2) execução apenas localhost; (3) revisão obrigatória na Sprint 8. Allowlist documentada em `.pip-audit.toml`. |
+
+| 12/06/2026 | CVE-2025-3000 | torch | 2.12.0 | n/a | Baixa para o contexto do projeto | **Risco residual aceito temporariamente**: vulnerabilidade reportada em `torch.jit.script` (TorchScript/JIT). O DocuVector Lite utiliza PyTorch exclusivamente para inferência de embeddings via Sentence Transformers (`sentence-transformers 5.5.1`) e não utiliza TorchScript, `torch.jit.script`, compilação dinâmica ou carregamento de modelos não confiáveis. Não existe versão corrigida indicada pelo pip-audit no momento da análise. Mitigações compensatórias: (1) uso apenas para inferência local; (2) modelos carregados exclusivamente de fontes confiáveis; (3) monitoramento contínuo via pip-audit; (4) revisão obrigatória em cada ciclo de atualização de dependências. Exceção documentada e aprovada até disponibilização de correção upstream. |

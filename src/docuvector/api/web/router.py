@@ -30,13 +30,14 @@ from docuvector.api.deps import (
     CurrentTokenDependency,
     DocumentCrudUseCaseDependency,
     EmbeddingBenchmarkUseCaseDependency,
-    IngestionUseCaseDependency,
     MetricsUseCaseDependency,
     RegisterUserUseCaseDependency,
+    SessionDependency,
     SettingsDependency,
     build_answer_use_case_for_store,
     get_client_ip,
     provide_compress_to_collection_use_case,
+    provide_ingestion_use_case_for_provider,
     resolve_vector_store_by_collection,
 )
 from docuvector.api.web.templating import current_user_or_none, templates
@@ -237,12 +238,12 @@ def chat_ask(
     embedder = resolve_embedder(EmbeddingProviderName(embedding_provider))
     llm_client = resolve_llm_client(provider_name)
 
-    collection_name = (
-        settings.chroma_collection_original
-        if vector_collection == "original"
-        else vector_collection
+    # Resolve o store considerando o provider de embedding.
+    # ST (384 dims) e OpenAI (1536 dims) usam coleções Chroma distintas.
+    store = resolve_vector_store_by_collection(
+        collection=vector_collection,
+        embedding_provider=embedding_provider,
     )
-    store = resolve_vector_store_by_collection(collection_name)
     answer_use_case = build_answer_use_case_for_store(store)
 
     try:
@@ -275,15 +276,24 @@ def chat_ask(
 async def chat_upload(
     request: Request,
     token_payload: CurrentTokenDependency,
-    ingestion_use_case: IngestionUseCaseDependency,
     crud_use_case: DocumentCrudUseCaseDependency,
     client_ip: ClientIpDependency,
+    session: SessionDependency,
     file: UploadFile,
     embedding_provider: Annotated[str, Form()],
 ) -> HTMLResponse:
-    """Upload inline na sidebar. Retorna lista atualizada de documentos."""
+    """Upload com roteamento automatico de colecao por embedding provider.
+
+    ST (sentence_transformers) -> colecoes docuvector_* (384 dims)
+    OpenAI -> colecoes docuvector_oai_* (1536 dims)
+    Evita InvalidDimensionException do ChromaDB.
+    """
     raw_bytes = await file.read()
     embedder = resolve_embedder(EmbeddingProviderName(embedding_provider))
+    ingestion_use_case = provide_ingestion_use_case_for_provider(
+        session=session,
+        embedding_provider_name=embedding_provider,
+    )
     error_message: str | None = None
     try:
         ingestion_use_case.ingest(
@@ -469,6 +479,7 @@ def chat_compress_to_collection(
     method: str,
     token_payload: CurrentTokenDependency,
     crud_use_case: DocumentCrudUseCaseDependency,
+    embedding_provider: Annotated[str, Form()] = "sentence_transformers",
 ) -> HTMLResponse:
     """Comprime e indexa o documento na coleção Chroma do método escolhido.
 
@@ -484,7 +495,10 @@ def chat_compress_to_collection(
             {"result": None, "error": f"Método inválido: {method}", "document_id": document_id},
         )
 
-    use_case = provide_compress_to_collection_use_case(method)
+    use_case = provide_compress_to_collection_use_case(
+        method_name=method,
+        embedding_provider=embedding_provider,
+    )
 
     # Recupera o filename do documento (BOLA: filtra por owner_id)
     documents = crud_use_case.list_for_owner(owner_id=token_payload.user_id)
@@ -545,7 +559,10 @@ def chat_compare_answer(
     llm_client = resolve_llm_client(provider_name)
 
     def _run_ask(collection: str) -> tuple[object | None, str | None]:
-        store = resolve_vector_store_by_collection(collection)
+        store = resolve_vector_store_by_collection(
+            collection=collection,
+            embedding_provider=embedding_provider,
+        )
         uc = build_answer_use_case_for_store(store)
         try:
             return uc.ask(
