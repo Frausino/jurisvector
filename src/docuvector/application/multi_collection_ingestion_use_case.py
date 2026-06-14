@@ -76,12 +76,17 @@ class MultiCollectionIngestionResult:
 
 
 class MultiCollectionIngestionUseCase:
-    """Pipeline de ingestão que grava em múltiplas coleções Chroma.
+    """Pipeline de ingestão — grava APENAS na coleção original.
 
-    Grava na coleção original e, em seguida, nas coleções comprimidas
-    (Int8, Binary, PCA, RandomProjection). Cada coleção comprimida
-    representa um espaço vetorial diferente — o que permite comparar
-    a qualidade do retrieval entre eles no dashboard.
+    Decisão de design (a partir da Sprint 6): compressão é 100% sob demanda.
+    O `ingest()` deste use case NÃO replica para coleções comprimidas.
+    O usuário escolhe qual compressor aplicar via sidebar
+    (CompressToCollectionUseCase).
+
+    O parâmetro `compressed_stores` do construtor é mantido para
+    compatibilidade — os métodos `_replicate_to_compressed_stores` e
+    `_fit_pca_stores` continuam disponíveis caso no futuro a estratégia
+    mude para "comprimir tudo na ingestão".
     """
 
     def __init__(
