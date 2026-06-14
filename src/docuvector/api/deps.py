@@ -287,7 +287,12 @@ def provide_ingestion_use_case(
     session: SessionDependency,
     vector_store: VectorStoreDependency,
 ) -> MultiCollectionIngestionUseCase:
-    """Use case de ingestão que grava na coleção original e nas 4 comprimidas."""
+    """Use case de ingestão — grava APENAS na coleção original.
+
+    Vetores comprimidos NÃO são gerados automaticamente na ingestão.
+    Compressão é sob demanda via `CompressToCollectionUseCase`.
+    `_all_compressed_stores()` é passado apenas para compatibilidade
+    (o ingest() do MultiCollectionIngestionUseCase não os utiliza)."""
 
     settings = get_settings()
     primary = IngestionUseCase(
@@ -572,6 +577,12 @@ def provide_ingestion_use_case_for_provider(
     Garante que ST (384 dims) usa coleções docuvector_* e
     OpenAI (1536 dims) usa coleções docuvector_oai_*.
     Evita o InvalidDimensionException do ChromaDB.
+
+    Nota: compressed_stores=[] porque a ingestão grava APENAS na coleção
+    original. Compressão para as coleções comprimidas (int8, binary, pca, rp)
+    é feita sob demanda via CompressToCollectionUseCase — o usuário escolhe
+    qual compressor aplicar a cada documento no menu da sidebar. Isso vale
+    para ambos os providers (ST e OpenAI).
     """
 
     settings = get_settings()
