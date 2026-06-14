@@ -106,4 +106,3 @@ class NistPasswordPolicyValidator:
 
         if comparable_token in plain_password.lower():
             raise ValidationError("Senha não pode conter o seu identificador de usuário.")
-        
