@@ -154,61 +154,63 @@ VectorStoreDependency = Annotated[
 ]
 
 
-@lru_cache(maxsize=1)
-def _get_int8_store() -> VectorStore:
+@lru_cache(maxsize=10)
+def _make_store(
+    is_openai: bool = False,
+    method: CompressionMethod | None = None,
+) -> VectorStore:
     settings = get_settings()
-    inner = ChromaVectorStore(
-        persist_directory=str(settings.chroma_persist_dir),
-        collection_name=settings.chroma_collection_int8,
-    )
-    return CompressedVectorStore(inner_store=inner, compressor=Int8Compressor())
+    persist = str(settings.chroma_persist_dir)
 
+    collection = (
+        {
+            None: settings.chroma_collection_openai_original,
+            CompressionMethod.INT8: settings.chroma_collection_openai_int8,
+            CompressionMethod.BINARY: settings.chroma_collection_openai_binary,
+            CompressionMethod.PCA: settings.chroma_collection_openai_pca,
+            CompressionMethod.RANDOM_PROJECTION: settings.chroma_collection_openai_rp,
+        }
+        if is_openai
+        else {
+            None: settings.chroma_collection_original,
+            CompressionMethod.INT8: settings.chroma_collection_int8,
+            CompressionMethod.BINARY: settings.chroma_collection_binary,
+            CompressionMethod.PCA: settings.chroma_collection_pca,
+            CompressionMethod.RANDOM_PROJECTION: settings.chroma_collection_rp,
+        }
+    )[method]
 
-@lru_cache(maxsize=1)
-def _get_binary_store() -> VectorStore:
-    settings = get_settings()
-    inner = ChromaVectorStore(
-        persist_directory=str(settings.chroma_persist_dir),
-        collection_name=settings.chroma_collection_binary,
-    )
-    return CompressedVectorStore(inner_store=inner, compressor=BinaryCompressor())
+    inner = ChromaVectorStore(persist_directory=persist, collection_name=collection)
 
-
-@lru_cache(maxsize=1)
-def _get_pca_store() -> VectorStore:
-    """PCA treinado no corpus completo — espaço vetorial consistente.
-    Ver CorpusPcaStore para documentação do GAP 2."""
-    settings = get_settings()
-    inner = ChromaVectorStore(
-        persist_directory=str(settings.chroma_persist_dir),
-        collection_name=settings.chroma_collection_pca,
-    )
-    return CorpusPcaStore(
-        inner_store=inner,
-        target_dim=settings.chroma_pca_target_dim,
-    )
-
-
-@lru_cache(maxsize=1)
-def _get_rp_store() -> VectorStore:
-    settings = get_settings()
-    inner = ChromaVectorStore(
-        persist_directory=str(settings.chroma_persist_dir),
-        collection_name=settings.chroma_collection_rp,
-    )
-    return CompressedVectorStore(
-        inner_store=inner,
-        compressor=RandomProjectionCompressor(target_dim=settings.chroma_pca_target_dim),
-    )
+    match method:
+        case None:
+            return inner
+        case CompressionMethod.INT8:
+            return CompressedVectorStore(inner_store=inner, compressor=Int8Compressor())
+        case CompressionMethod.BINARY:
+            return CompressedVectorStore(inner_store=inner, compressor=BinaryCompressor())
+        case CompressionMethod.PCA:
+            return CorpusPcaStore(
+                inner_store=inner,
+                target_dim=settings.chroma_pca_target_dim,
+            )
+        case CompressionMethod.RANDOM_PROJECTION:
+            return CompressedVectorStore(
+                inner_store=inner,
+                compressor=RandomProjectionCompressor(target_dim=settings.chroma_pca_target_dim),
+            )
 
 
 def _all_compressed_stores() -> list[StoreEntry]:
     """Retorna todas as coleções comprimidas com seus métodos correspondentes."""
     return [
-        (CompressionMethod.INT8, _get_int8_store()),
-        (CompressionMethod.BINARY, _get_binary_store()),
-        (CompressionMethod.PCA, _get_pca_store()),
-        (CompressionMethod.RANDOM_PROJECTION, _get_rp_store()),
+        (CompressionMethod.INT8, _make_store(method=CompressionMethod.INT8)),
+        (CompressionMethod.BINARY, _make_store(method=CompressionMethod.BINARY)),
+        (CompressionMethod.PCA, _make_store(method=CompressionMethod.PCA)),
+        (
+            CompressionMethod.RANDOM_PROJECTION,
+            _make_store(method=CompressionMethod.RANDOM_PROJECTION),
+        ),
     ]
 
 
@@ -285,7 +287,12 @@ def provide_ingestion_use_case(
     session: SessionDependency,
     vector_store: VectorStoreDependency,
 ) -> MultiCollectionIngestionUseCase:
-    """Use case de ingestão que grava na coleção original e nas 4 comprimidas."""
+    """Use case de ingestão — grava APENAS na coleção original.
+
+    Vetores comprimidos NÃO são gerados automaticamente na ingestão.
+    Compressão é sob demanda via `CompressToCollectionUseCase`.
+    `_all_compressed_stores()` é passado apenas para compatibilidade
+    (o ingest() do MultiCollectionIngestionUseCase não os utiliza)."""
 
     settings = get_settings()
     primary = IngestionUseCase(
@@ -424,73 +431,14 @@ CompareRetrievalUseCaseDependency = Annotated[
 ]
 
 
-# =============================================================
-# Stores OpenAI — coleções separadas (1536 dims)
-# Nunca misturar com stores ST (384 dims): dimensões incompatíveis.
-# =============================================================
-@lru_cache(maxsize=1)
-def _get_oai_original_store() -> ChromaVectorStore:
-    settings = get_settings()
-    return ChromaVectorStore(
-        persist_directory=str(settings.chroma_persist_dir),
-        collection_name=settings.chroma_collection_openai_original,
-    )
-
-
-@lru_cache(maxsize=1)
-def _get_oai_int8_store() -> VectorStore:
-    settings = get_settings()
-    inner = ChromaVectorStore(
-        persist_directory=str(settings.chroma_persist_dir),
-        collection_name=settings.chroma_collection_openai_int8,
-    )
-    return CompressedVectorStore(inner_store=inner, compressor=Int8Compressor())
-
-
-@lru_cache(maxsize=1)
-def _get_oai_binary_store() -> VectorStore:
-    settings = get_settings()
-    inner = ChromaVectorStore(
-        persist_directory=str(settings.chroma_persist_dir),
-        collection_name=settings.chroma_collection_openai_binary,
-    )
-    return CompressedVectorStore(inner_store=inner, compressor=BinaryCompressor())
-
-
-@lru_cache(maxsize=1)
-def _get_oai_pca_store() -> VectorStore:
-    settings = get_settings()
-    inner = ChromaVectorStore(
-        persist_directory=str(settings.chroma_persist_dir),
-        collection_name=settings.chroma_collection_openai_pca,
-    )
-    return CorpusPcaStore(
-        inner_store=inner,
-        target_dim=settings.chroma_pca_target_dim,
-    )
-
-
-@lru_cache(maxsize=1)
-def _get_oai_rp_store() -> VectorStore:
-    settings = get_settings()
-    inner = ChromaVectorStore(
-        persist_directory=str(settings.chroma_persist_dir),
-        collection_name=settings.chroma_collection_openai_rp,
-    )
-    return CompressedVectorStore(
-        inner_store=inner,
-        compressor=RandomProjectionCompressor(target_dim=settings.chroma_pca_target_dim),
-    )
-
-
-def get_vector_store_for_provider(provider_name: str) -> ChromaVectorStore:
+def get_vector_store_for_provider(provider_name: str) -> VectorStore:
     """Retorna o store original correto para o provider de embedding.
 
     Garante que vetores ST (384 dims) e OpenAI (1536 dims) nunca
     compartilhem a mesma coleção ChromaDB.
     """
     if provider_name == EmbeddingProviderName.OPENAI.value:
-        return _get_oai_original_store()
+        return _make_store(is_openai=True)
     return get_vector_store()
 
 
@@ -511,30 +459,39 @@ def resolve_vector_store_by_collection(
 
     collection_map: dict[str, VectorStore] = (
         {
-            settings.chroma_collection_openai_original: _get_oai_original_store(),
-            settings.chroma_collection_openai_int8: _get_oai_int8_store(),
-            settings.chroma_collection_openai_binary: _get_oai_binary_store(),
-            settings.chroma_collection_openai_pca: _get_oai_pca_store(),
-            settings.chroma_collection_openai_rp: _get_oai_rp_store(),
-            # aliases curtos para uso no seletor do chat
-            "original": _get_oai_original_store(),
-            "int8": _get_oai_int8_store(),
-            "binary": _get_oai_binary_store(),
-            "pca": _get_oai_pca_store(),
-            "random_projection": _get_oai_rp_store(),
+            settings.chroma_collection_openai_original: _make_store(is_openai=True),
+            settings.chroma_collection_openai_int8: _make_store(
+                is_openai=True, method=CompressionMethod.INT8
+            ),
+            settings.chroma_collection_openai_binary: _make_store(
+                is_openai=True, method=CompressionMethod.BINARY
+            ),
+            settings.chroma_collection_openai_pca: _make_store(
+                is_openai=True, method=CompressionMethod.PCA
+            ),
+            settings.chroma_collection_openai_rp: _make_store(
+                is_openai=True, method=CompressionMethod.RANDOM_PROJECTION
+            ),
+            "original": _make_store(is_openai=True),
+            "int8": _make_store(is_openai=True, method=CompressionMethod.INT8),
+            "binary": _make_store(is_openai=True, method=CompressionMethod.BINARY),
+            "pca": _make_store(is_openai=True, method=CompressionMethod.PCA),
+            "random_projection": _make_store(
+                is_openai=True, method=CompressionMethod.RANDOM_PROJECTION
+            ),
         }
         if is_openai
         else {
             settings.chroma_collection_original: get_vector_store(),
-            settings.chroma_collection_int8: _get_int8_store(),
-            settings.chroma_collection_binary: _get_binary_store(),
-            settings.chroma_collection_pca: _get_pca_store(),
-            settings.chroma_collection_rp: _get_rp_store(),
+            settings.chroma_collection_int8: _make_store(method=CompressionMethod.INT8),
+            settings.chroma_collection_binary: _make_store(method=CompressionMethod.BINARY),
+            settings.chroma_collection_pca: _make_store(method=CompressionMethod.PCA),
+            settings.chroma_collection_rp: _make_store(method=CompressionMethod.RANDOM_PROJECTION),
             "original": get_vector_store(),
-            "int8": _get_int8_store(),
-            "binary": _get_binary_store(),
-            "pca": _get_pca_store(),
-            "random_projection": _get_rp_store(),
+            "int8": _make_store(method=CompressionMethod.INT8),
+            "binary": _make_store(method=CompressionMethod.BINARY),
+            "pca": _make_store(method=CompressionMethod.PCA),
+            "random_projection": _make_store(method=CompressionMethod.RANDOM_PROJECTION),
         }
     )
     return collection_map.get(collection, get_vector_store_for_provider(embedding_provider))
@@ -553,34 +510,54 @@ def provide_compress_to_collection_use_case(
     is_openai = embedding_provider == EmbeddingProviderName.OPENAI.value
 
     st_map: dict[str, tuple[VectorStore, str]] = {
-        CompressionMethod.INT8.value: (_get_int8_store(), settings.chroma_collection_int8),
-        CompressionMethod.BINARY.value: (_get_binary_store(), settings.chroma_collection_binary),
-        CompressionMethod.PCA.value: (_get_pca_store(), settings.chroma_collection_pca),
-        CompressionMethod.RANDOM_PROJECTION.value: (_get_rp_store(), settings.chroma_collection_rp),
+        CompressionMethod.INT8.value: (
+            _make_store(method=CompressionMethod.INT8),
+            settings.chroma_collection_int8,
+        ),
+        CompressionMethod.BINARY.value: (
+            _make_store(method=CompressionMethod.BINARY),
+            settings.chroma_collection_binary,
+        ),
+        CompressionMethod.PCA.value: (
+            _make_store(method=CompressionMethod.PCA),
+            settings.chroma_collection_pca,
+        ),
+        CompressionMethod.RANDOM_PROJECTION.value: (
+            _make_store(method=CompressionMethod.RANDOM_PROJECTION),
+            settings.chroma_collection_rp,
+        ),
     }
     oai_map: dict[str, tuple[VectorStore, str]] = {
         CompressionMethod.INT8.value: (
-            _get_oai_int8_store(),
+            _make_store(is_openai=True, method=CompressionMethod.INT8),
             settings.chroma_collection_openai_int8,
         ),
         CompressionMethod.BINARY.value: (
-            _get_oai_binary_store(),
+            _make_store(is_openai=True, method=CompressionMethod.BINARY),
             settings.chroma_collection_openai_binary,
         ),
-        CompressionMethod.PCA.value: (_get_oai_pca_store(), settings.chroma_collection_openai_pca),
+        CompressionMethod.PCA.value: (
+            _make_store(is_openai=True, method=CompressionMethod.PCA),
+            settings.chroma_collection_openai_pca,
+        ),
         CompressionMethod.RANDOM_PROJECTION.value: (
-            _get_oai_rp_store(),
+            _make_store(is_openai=True, method=CompressionMethod.RANDOM_PROJECTION),
             settings.chroma_collection_openai_rp,
         ),
     }
     store_map = oai_map if is_openai else st_map
-    original = _get_oai_original_store() if is_openai else get_vector_store()
+    original = _make_store(is_openai=True) if is_openai else get_vector_store()
     default_col = (
         settings.chroma_collection_openai_int8 if is_openai else settings.chroma_collection_int8
     )
     compressed_store, collection_name = store_map.get(
         method_name,
-        (_get_oai_int8_store() if is_openai else _get_int8_store(), default_col),
+        (
+            _make_store(is_openai=True, method=CompressionMethod.INT8)
+            if is_openai
+            else _make_store(method=CompressionMethod.INT8),
+            default_col,
+        ),
     )
     return CompressToCollectionUseCase(
         original_store=original,
@@ -600,11 +577,17 @@ def provide_ingestion_use_case_for_provider(
     Garante que ST (384 dims) usa coleções docuvector_* e
     OpenAI (1536 dims) usa coleções docuvector_oai_*.
     Evita o InvalidDimensionException do ChromaDB.
+
+    Nota: compressed_stores=[] porque a ingestão grava APENAS na coleção
+    original. Compressão para as coleções comprimidas (int8, binary, pca, rp)
+    é feita sob demanda via CompressToCollectionUseCase — o usuário escolhe
+    qual compressor aplicar a cada documento no menu da sidebar. Isso vale
+    para ambos os providers (ST e OpenAI).
     """
 
     settings = get_settings()
     is_openai = embedding_provider_name == EmbeddingProviderName.OPENAI.value
-    vector_store = _get_oai_original_store() if is_openai else get_vector_store()
+    vector_store = _make_store(is_openai=True) if is_openai else get_vector_store()
 
     primary = IngestionUseCase(
         document_repository=SqlAlchemyDocumentRepository(session),
