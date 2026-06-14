@@ -2,6 +2,12 @@
 
 **RAG Jurídico com compressão observável de embeddings**
 
+Membros:
+
+Eduardo Leite Soares |
+Arthur Martins de Andrade |
+Davi Rosa Frausino 
+
 [![CI](https://github.com/Frausino/docuvector-lite/actions/workflows/ci.yml/badge.svg)](https://github.com/Frausino/docuvector-lite/actions)
 ![Python](https://img.shields.io/badge/python-3.12-blue)
 ![Coverage](https://img.shields.io/badge/coverage-86%25-green)
