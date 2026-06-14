@@ -15,6 +15,7 @@ e fica como `frozenset` para lookup O(1).
 
 from __future__ import annotations
 
+import unicodedata
 from functools import lru_cache
 from pathlib import Path
 
@@ -57,14 +58,17 @@ class NistPasswordPolicyValidator:
         self._min_length = min_length
         self._max_length = max_length
 
-    def validate(self, plain_password: str, owner_identifier: str | None = None) -> None:
+    def validate(self, plain_password: str | None, owner_identifier: str | None = None) -> None:
         """Valida a senha; levanta `ValidationError` com motivo explícito."""
-        if plain_password is None:
-            raise ValidationError("Senha é obrigatória.")
+        if not plain_password or not plain_password.strip():
+            raise ValidationError("Senha é obrigatória e não pode conter apenas espaços.")
 
-        self._enforce_length_bounds(plain_password)
-        self._reject_if_in_common_passwords(plain_password)
-        self._reject_if_matches_identifier(plain_password, owner_identifier)
+        # Normaliza a entrada para garantir consistência em caracteres Unicode (acentos/emojis)
+        normalized_password = unicodedata.normalize("NFKC", plain_password)
+
+        self._enforce_length_bounds(normalized_password)
+        self._reject_if_in_common_passwords(normalized_password)
+        self._reject_if_matches_identifier(normalized_password, owner_identifier)
 
     def _enforce_length_bounds(self, plain_password: str) -> None:
         password_length = len(plain_password)
