@@ -65,7 +65,7 @@ def test_rejects_password_exceeding_max_length(
 @pytest.mark.unit
 def test_rejects_none_password(validator: NistPasswordPolicyValidator) -> None:
     with pytest.raises(ValidationError, match="obrigatória"):
-        validator.validate(None)  # type: ignore[arg-type]
+        validator.validate(None)
 
 
 # =============================================================
